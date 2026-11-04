@@ -6,16 +6,25 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
-    const savedUser = localStorage.getItem("user");
-    return savedUser ? JSON.parse(savedUser) : null;
+    try {
+      const savedUser = localStorage.getItem("user");
+      // Проверяем, что там не пусто и не строка "undefined"
+      if (savedUser && savedUser !== "undefined") {
+        return JSON.parse(savedUser);
+      }
+      return null;
+    } catch (error) {
+      // Если данные битые, просто очищаем память
+      localStorage.removeItem("user");
+      return null;
+    }
   });
-
   const navigate = useNavigate();
 
   const login = (userData, token) => {
     setUser(userData);
     localStorage.setItem("user", JSON.stringify(userData));
-    localStorage.setItem("token", token);
+    localStorage.setItem("token", token); 
     navigate("/");
   };
 

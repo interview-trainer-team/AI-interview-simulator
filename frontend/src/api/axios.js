@@ -1,7 +1,10 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost:8000/api', // Временный адрес. Заменить на реальный URL бэкенда, когда он будет готов.
+  baseURL: 'http://localhost:8000/api', 
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
 api.interceptors.request.use((config) => {
@@ -11,5 +14,15 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.data && error.response.data.error) {
+      error.message = error.response.data.error.message;
+    }
+    return Promise.reject(error);
+  }
+);
 
 export default api;
