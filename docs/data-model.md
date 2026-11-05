@@ -91,7 +91,7 @@ erDiagram
         jsonb strong_topics
         jsonb weak_topics
         jsonb recommendations
-        varchar level_verdict
+        varchar level_verdict "MATCH, PARTIAL, BELOW"
         timestamptz created_at
     }
 ```
@@ -179,6 +179,8 @@ erDiagram
 | `created_at`, `analyzed_at` | timestamptz | Получен ответ, выполнен анализ |
 
 **interview_feedback** — `interview_id` (PK, FK), `status` (`PENDING`, `DONE`, `FAILED`), `summary`, `strong_topics`, `weak_topics`, `recommendations` (jsonb-списки), `level_verdict`, `created_at`.
+
+`level_verdict` — соответствие уровню по итоговому баллу [Предложение]: `MATCH` — от 7.5, соответствует; `PARTIAL` — от 5.0 до 7.4, частично; `BELOW` — ниже 5.0, не соответствует. Пока рекомендации не сформированы — `null`.
 
 ## Статусы интервью
 
