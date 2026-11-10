@@ -266,6 +266,37 @@ function normalizeResults(data) {
   };
 }
 
+// Краткая карточка интервью для списка истории
+function toInterviewListItem(interview) {
+  const questions = interview.questions || [];
+  const answeredCount =
+    interview.answeredCount ?? questions.filter((question) => question.answer).length;
+  const levelCode =
+    interview.levelCode || findLevelCode(interview.levelName || "") || (interview.levelName || "").toLowerCase() || null;
+
+  return {
+    id: interview.id,
+    direction: interview.directionName || interview.direction,
+    levelCode,
+    status: interview.status,
+    finishedEarly: !!interview.finishedEarly,
+    totalScore: interview.totalScore ?? null,
+    createdAt: interview.createdAt || null,
+    completedAt: interview.completedAt || null,
+    answeredCount,
+  };
+}
+
+function interviewSortTime(item) {
+  return new Date(item.completedAt || item.createdAt || 0).getTime();
+}
+
+// Приводим ответ списка API к виду { interviews }
+function normalizeInterviewList(data) {
+  const raw = Array.isArray(data) ? data : data?.interviews || data?.items || [];
+  return raw.map(toInterviewListItem).sort((a, b) => interviewSortTime(b) - interviewSortTime(a));
+}
+
 // ---------- ЗАПРОСЫ ----------
 // Форматы запросов и ответов предварительные: уточнить по docs/api.md
 
@@ -431,4 +462,20 @@ export const getInterviewResultsRequest = async (interviewId) => {
     }
     throw error;
   }
+};
+
+// Список интервью для истории → { interviews }
+// Реальный путь по черновику docs/api.md: GET /interviews
+export const getInterviewsRequest = async () => {
+  if (USE_MOCK) {
+    await delay(500);
+    const store = loadMockStore();
+    const interviews = Object.values(store)
+      .map(toInterviewListItem)
+      .sort((a, b) => interviewSortTime(b) - interviewSortTime(a));
+    return { interviews };
+  }
+
+  const response = await api.get("/interviews");
+  return { interviews: normalizeInterviewList(response.data) };
 };
