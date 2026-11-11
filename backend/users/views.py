@@ -1,85 +1,60 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework.permissions import IsAuthenticated # <-- Добавили импорт
 from django.contrib.auth import get_user_model
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 from .serializers import LoginSerializer, RegisterSerializer
 
 User = get_user_model()
 
 class LoginView(APIView):
-    # Авторизация для этого метода не нужна
     permission_classes = []
     authentication_classes = []
 
     def post(self, request):
-        # 1. Валидация данных
         serializer = LoginSerializer(data=request.data)
         if not serializer.is_valid():
-            return Response({
-                "error": {
-                    "code": "VALIDATION_ERROR",
-                    "message": "Заполните все поля",
-                    "details": {"fields": serializer.errors}
-                }
-            }, status=status.HTTP_400_BAD_REQUEST)
+            # Если настроен глобальный обработчик, он сам отформатирует это
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         email = serializer.validated_data['email']
         password = serializer.validated_data['password']
-
-        # 2. Поиск пользователя и проверка пароля
-        # Используем filter().first(), чтобы не было ошибки, если юзера нет
         user = User.objects.filter(email=email).first()
         
         if user is None or not user.check_password(password):
-            # Одинаковый ответ для обоих случаев (безопасность)
-            return Response({
-                "error": {
-                    "code": "INVALID_CREDENTIALS",
-                    "message": "Неверный email или пароль"
-                }
-            }, status=status.HTTP_401_UNAUTHORIZED)
+            return Response(
+                {"code": "INVALID_CREDENTIALS", "message": "Неверный email или пароль"}, 
+                status=status.HTTP_401_UNAUTHORIZED
+            )
 
-        # 3. Генерация JWT токена
         refresh = RefreshToken.for_user(user)
-        access_token = str(refresh.access_token)
-
-        # 4. Успешный ответ
         return Response({
-            "accessToken": access_token,
+            "accessToken": str(refresh.access_token),
+            "refreshToken": str(refresh), # <-- Важно для Logout!
             "tokenType": "Bearer",
-            "expiresIn": 3600, # 60 минут в секундах
+            "expiresIn": 3600,
             "user": {
                 "id": str(user.id),
                 "email": user.email,
-                # Берем имя и фамилию из стандартной модели Django, если они есть
                 "fullName": f"{user.first_name} {user.last_name}".strip() or user.email
             }
         }, status=status.HTTP_200_OK)
 
 
 class RegisterView(APIView):
-    permission_classes = [] # Регистрация доступна всем
+    permission_classes = []
     authentication_classes = []
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
-        
         if not serializer.is_valid():
-            return Response({
-                "error": {
-                    "code": "VALIDATION_ERROR",
-                    "message": "Ошибка валидации данных",
-                    "details": {"fields": serializer.errors}
-                }
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         email = serializer.validated_data['email']
         password = serializer.validated_data['password']
         full_name = serializer.validated_data.get('fullName', '')
 
-        # Создаем пользователя. В Django по умолчанию есть поле username, 
-        # поэтому мы используем email в качестве username.
         user = User.objects.create_user(
             username=email,
             email=email,
@@ -87,12 +62,10 @@ class RegisterView(APIView):
             first_name=full_name
         )
 
-        # Сразу выдаем токен, чтобы пользователю не нужно было логиниться после регистрации
         refresh = RefreshToken.for_user(user)
-        access_token = str(refresh.access_token)
-
         return Response({
-            "accessToken": access_token,
+            "accessToken": str(refresh.access_token),
+            "refreshToken": str(refresh), # <-- Важно для Logout!
             "tokenType": "Bearer",
             "expiresIn": 3600,
             "user": {
@@ -101,3 +74,35 @@ class RegisterView(APIView):
                 "fullName": user.first_name
             }
         }, status=status.HTTP_201_CREATED)
+
+
+class MeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        # Ваня требовал возвращать createdAt (дату создания)
+        created_at = user.date_joined.isoformat() if hasattr(user, 'date_joined') else None
+        
+        return Response({
+            "id": str(user.id),
+            "email": user.email,
+            "fullName": user.get_full_name() or user.first_name,
+            "createdAt": created_at
+        }, status=status.HTTP_200_OK)
+
+
+class LogoutView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            # Ваня требует, чтобы токен попадал в blacklist (отзывался)
+            # Для этого фронтенд должен прислать refreshToken в теле запроса
+            refresh_token = request.data.get("refreshToken")
+            if refresh_token:
+                token = RefreshToken(refresh_token)
+                token.blacklist() # <-- Отзываем токен
+            return Response({"message": "Успешный выход из системы"}, status=status.HTTP_200_OK)
+        except TokenError:
+            return Response({"code": "INVALID_TOKEN", "message": "Токен недействителен"}, status=status.HTTP_400_BAD_REQUEST)
