@@ -4,6 +4,8 @@ from rest_framework import status
 from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.tokens import RefreshToken
 from .serializers import LoginSerializer, RegisterSerializer
+from rest_framework.permissions import IsAuthenticated
+
 
 User = get_user_model()
 
@@ -101,3 +103,18 @@ class RegisterView(APIView):
                 "fullName": user.first_name
             }
         }, status=status.HTTP_201_CREATED)
+
+class MeView(APIView):
+    # Эта строчка магическая: она проверяет наличие JWT-токена в заголовках
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        # Если токен валиден, Django сам достает пользователя из базы 
+        # и кладет его в request.user
+        user = request.user
+        
+        return Response({
+            "id": str(user.id),
+            "email": user.email,
+            "fullName": user.first_name # Или user.get_full_name(), если используешь стандартную модель
+        }, status=status.HTTP_200_OK)
