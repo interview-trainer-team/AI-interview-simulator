@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import MainPage from "./pages/MainPage";
 import LoginPage from "./pages/LoginPage";
+import ProfilePage from "./pages/ProfilePage";
 import RegisterPage from "./pages/RegisterPage";
 import InterviewSetupPage from "./pages/InterviewSetupPage";
 import InterviewPage from "./pages/InterviewPage";
@@ -26,6 +27,7 @@ function App() {
             <Route path="/interview/:id" element={<InterviewPage />} />
             <Route path="/interview/:id/results" element={<ResultsPage />} />
             <Route path="/history" element={<HistoryPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
           </Route>
 
           {/* 404 */}
