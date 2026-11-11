@@ -6,6 +6,9 @@ from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 from .serializers import LoginSerializer, RegisterSerializer
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
+from .models import RevokedToken 
+from datetime import datetime, timezone
+
 
 User = get_user_model()
 
@@ -97,27 +100,17 @@ class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        try:
-            # Ваня требует, чтобы токен попадал в blacklist (отзывался)
-            # Для этого фронтенд должен прислать refreshToken в теле запроса
-            refresh_token = request.data.get("refreshToken")
-            if refresh_token:
-                token = RefreshToken(refresh_token)
-                token.blacklist() # <-- Отзываем токен
-            return Response({"message": "Успешный выход из системы"}, status=status.HTTP_200_OK)
-        except TokenError:
-            return Response({"code": "INVALID_TOKEN", "message": "Токен недействителен"}, status=status.HTTP_400_BAD_REQUEST)
+        # request.auth содержит распакованный токен
+        token = request.auth
+        jti = token['jti']
+        # Переводим unix timestamp в понятную дату
+        expires_at = datetime.fromtimestamp(token['exp'], tz=timezone.utc)
+        user_id = request.user.id
 
-class LogoutView(APIView):
-    permission_classes = [IsAuthenticated]
+        # get_or_create защищает от ошибки 500, если токен уже в черном списке
+        RevokedToken.objects.get_or_create(
+            jti=jti,
+            defaults={'user_id': user_id, 'expires_at': expires_at}
+        )
 
-    def post(self, request):
-        try:
-            # Берем refresh токен из запроса
-            refresh_token = request.data.get("refreshToken")
-            if refresh_token:
-                token = RefreshToken(refresh_token)
-                token.blacklist() # <-- Отправляем токен в черный список
-            return Response({"message": "Успешный выход из системы"}, status=status.HTTP_200_OK)
-        except TokenError:
-            return Response({"code": "INVALID_TOKEN", "message": "Токен недействителен"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(status=status.HTTP_204_NO_CONTENT)
