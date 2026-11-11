@@ -1,10 +1,11 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated # <-- Добавили импорт
+from rest_framework.permissions import IsAuthenticated 
 from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 from .serializers import LoginSerializer, RegisterSerializer
+from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 
 User = get_user_model()
 
@@ -103,6 +104,20 @@ class LogoutView(APIView):
             if refresh_token:
                 token = RefreshToken(refresh_token)
                 token.blacklist() # <-- Отзываем токен
+            return Response({"message": "Успешный выход из системы"}, status=status.HTTP_200_OK)
+        except TokenError:
+            return Response({"code": "INVALID_TOKEN", "message": "Токен недействителен"}, status=status.HTTP_400_BAD_REQUEST)
+
+class LogoutView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            # Берем refresh токен из запроса
+            refresh_token = request.data.get("refreshToken")
+            if refresh_token:
+                token = RefreshToken(refresh_token)
+                token.blacklist() # <-- Отправляем токен в черный список
             return Response({"message": "Успешный выход из системы"}, status=status.HTTP_200_OK)
         except TokenError:
             return Response({"code": "INVALID_TOKEN", "message": "Токен недействителен"}, status=status.HTTP_400_BAD_REQUEST)
