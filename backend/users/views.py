@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.tokens import RefreshToken
-from .serializers import LoginSerializer
+from .serializers import LoginSerializer, RegisterSerializer
 
 User = get_user_model()
 
@@ -56,3 +56,48 @@ class LoginView(APIView):
                 "fullName": f"{user.first_name} {user.last_name}".strip() or user.email
             }
         }, status=status.HTTP_200_OK)
+
+
+class RegisterView(APIView):
+    permission_classes = [] # Регистрация доступна всем
+    authentication_classes = []
+
+    def post(self, request):
+        serializer = RegisterSerializer(data=request.data)
+        
+        if not serializer.is_valid():
+            return Response({
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": "Ошибка валидации данных",
+                    "details": {"fields": serializer.errors}
+                }
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        email = serializer.validated_data['email']
+        password = serializer.validated_data['password']
+        full_name = serializer.validated_data.get('fullName', '')
+
+        # Создаем пользователя. В Django по умолчанию есть поле username, 
+        # поэтому мы используем email в качестве username.
+        user = User.objects.create_user(
+            username=email,
+            email=email,
+            password=password,
+            first_name=full_name
+        )
+
+        # Сразу выдаем токен, чтобы пользователю не нужно было логиниться после регистрации
+        refresh = RefreshToken.for_user(user)
+        access_token = str(refresh.access_token)
+
+        return Response({
+            "accessToken": access_token,
+            "tokenType": "Bearer",
+            "expiresIn": 3600,
+            "user": {
+                "id": str(user.id),
+                "email": user.email,
+                "fullName": user.first_name
+            }
+        }, status=status.HTTP_201_CREATED)
