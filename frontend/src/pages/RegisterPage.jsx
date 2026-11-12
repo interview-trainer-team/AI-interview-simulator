@@ -1,6 +1,3 @@
-function RegisterPage() {
-  return <h1>Cтраница регистрации</h1>;
-}
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
