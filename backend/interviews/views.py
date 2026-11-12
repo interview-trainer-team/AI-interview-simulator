@@ -4,18 +4,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .errors import error_response
 from .models import Direction, Interview, InterviewQuestion, InterviewStatus, Level
 from .services import QUESTIONS_PER_INTERVIEW, pick_bank_questions, to_utc_iso
 
 ACTIVE_STATUSES = [InterviewStatus.CREATED, InterviewStatus.IN_PROGRESS]
-
-
-def error_response(code, message, http_status, details=None):
-    """Единый формат ошибок из API-контракта (8.6)."""
-    body = {"error": {"code": code, "message": message}}
-    if details:
-        body["error"]["details"] = details
-    return Response(body, status=http_status)
 
 
 class DirectionListView(APIView):
