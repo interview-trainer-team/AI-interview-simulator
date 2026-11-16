@@ -12,7 +12,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 
 import os
 from pathlib import Path
-
+from datetime import timedelta
 from dotenv import load_dotenv
 
 # (папка бэкенда, .пэрент - корень репо - .енв) Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -147,3 +147,20 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
+
+# Настройки SimpleJWT
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=int(os.getenv("JWT_EXPIRES_MINUTES", 60))),
+    'SIGNING_KEY': os.getenv("JWT_SECRET", SECRET_KEY),
+    'ALGORITHM': 'HS256',
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'USER_ID_CLAIM': 'sub',  # Ваня просил, чтобы id был в поле sub
+}
+
+# Настройки Django REST Framework
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'users.authentication.CustomJWTAuthentication', # Наш кастомный охранник
+    ),
+    'EXCEPTION_HANDLER': 'users.exceptions.custom_exception_handler', # Наш обработчик ошибок
+}   
