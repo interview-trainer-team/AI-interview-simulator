@@ -1,24 +1,24 @@
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
+from django.db import IntegrityError, transaction
 from django.conf import settings
+from django.utils import timezone as dj_timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import AuthenticationFailed
 from django.contrib.auth import get_user_model
 from rest_framework_simplejwt.tokens import AccessToken
 from .serializers import LoginSerializer, RegisterSerializer
 from .models import RevokedToken
 from .exceptions import EmailAlreadyExists
+# Импорт функции Вики!
+from interviews.services import to_utc_iso 
 
 User = get_user_model()
 
-def to_utc_iso(dt):
-    return dt.strftime('%Y-%m-%dT%H:%M:%SZ') if dt else None
-
 class LoginView(APIView):
-    authentication_classes = [] # Блокер 5
+    authentication_classes = []
     permission_classes = []
 
     def post(self, request):
@@ -31,23 +31,13 @@ class LoginView(APIView):
         try:
             user = User.objects.get_by_natural_key(email)
         except User.DoesNotExist:
-            # ИСПРАВЛЕНИЕ: возвращаем Response напрямую, без raise
-            return Response(
-                {"error": {"code": "INVALID_CREDENTIALS", "message": "Неверный email или пароль"}},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
+            return Response({"error": {"code": "INVALID_CREDENTIALS", "message": "Неверный email или пароль"}}, status=status.HTTP_401_UNAUTHORIZED)
 
         if not user.check_password(password) or not user.is_active:
-            # ИСПРАВЛЕНИЕ: также возвращаем Response напрямую
-            return Response(
-                {"error": {"code": "INVALID_CREDENTIALS", "message": "Неверный email или пароль"}},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
+            return Response({"error": {"code": "INVALID_CREDENTIALS", "message": "Неверный email или пароль"}}, status=status.HTTP_401_UNAUTHORIZED)
 
-        token = AccessToken.for_user(user) # Блокер: используем AccessToken
-        
-        # Считаем expiresIn из настроек
-        lifetime = settings.SIMPLE_JWT.get('ACCESS_TOKEN_LIFETIME', timedelta(minutes=60))
+        token = AccessToken.for_user(user)
+        lifetime = settings.SIMPLE_JWT.get('ACCESS_TOKEN_LIFETIME')
         
         return Response({
             "accessToken": str(token),
@@ -66,16 +56,18 @@ class RegisterView(APIView):
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
-        if not serializer.is_valid():
-            if 'email' in serializer.errors and "уже существует" in str(serializer.errors['email']):
-                raise EmailAlreadyExists()
-            return Response({"error": {"code": "VALIDATION_ERROR", "message": "Проверьте данные", "details": {"fields": serializer.errors}}}, status=status.HTTP_400_BAD_REQUEST)
+        serializer.is_valid(raise_exception=True) # Если ошибка валидации, её поймает exceptions.py
 
         email = serializer.validated_data['email']
         password = serializer.validated_data['password']
         full_name = serializer.validated_data['fullName']
 
-        user = User.objects.create_user(email=email, password=password, full_name=full_name)
+        try:
+            # Защита от гонки (race condition)
+            with transaction.atomic():
+                user = User.objects.create_user(email=email, password=password, full_name=full_name)
+        except IntegrityError:
+            raise EmailAlreadyExists()
 
         return Response({
             "user": {
@@ -95,7 +87,7 @@ class MeView(APIView):
             "id": str(user.id),
             "email": user.email,
             "fullName": user.full_name,
-            "createdAt": to_utc_iso(user.created_at) # Исправлен формат
+            "createdAt": to_utc_iso(user.created_at)
         })
 
 class LogoutView(APIView):

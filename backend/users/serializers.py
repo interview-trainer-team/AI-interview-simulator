@@ -1,6 +1,7 @@
 import re
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
+from .exceptions import EmailAlreadyExists
 
 User = get_user_model()
 
@@ -9,14 +10,15 @@ class LoginSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True, required=True, error_messages={'blank': 'Заполните все поля', 'required': 'Заполните все поля'})
 
 class RegisterSerializer(serializers.Serializer):
-    email = serializers.EmailField(required=True)
-    password = serializers.CharField(write_only=True, required=True)
-    fullName = serializers.CharField(required=True, min_length=2, max_length=150, trim_whitespace=True)
+    email = serializers.EmailField(required=True, error_messages={'blank': 'Заполните все поля', 'required': 'Заполните все поля', 'invalid': 'Некорректный email'})
+    password = serializers.CharField(write_only=True, required=True, error_messages={'blank': 'Заполните все поля', 'required': 'Заполните все поля'})
+    fullName = serializers.CharField(required=True, min_length=2, max_length=150, trim_whitespace=True, error_messages={'blank': 'Заполните все поля', 'required': 'Заполните все поля', 'min_length': 'Имя должно быть не менее 2 символов'})
 
     def validate_email(self, value):
         value = value.strip().lower()
+        # Бросаем ошибку 409 напрямую из сериализатора
         if User.objects.filter(email=value).exists():
-            raise serializers.ValidationError("Пользователь с таким email уже существует")
+            raise EmailAlreadyExists()
         return value
 
     def validate_password(self, value):
