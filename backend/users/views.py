@@ -2,7 +2,6 @@ import uuid
 from datetime import datetime, timezone
 from django.db import IntegrityError, transaction
 from django.conf import settings
-from django.utils import timezone as dj_timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -12,7 +11,6 @@ from rest_framework_simplejwt.tokens import AccessToken
 from .serializers import LoginSerializer, RegisterSerializer
 from .models import RevokedToken
 from .exceptions import EmailAlreadyExists
-# Импорт функции Вики!
 from interviews.services import to_utc_iso 
 
 User = get_user_model()
@@ -29,7 +27,7 @@ class LoginView(APIView):
         password = serializer.validated_data['password']
 
         try:
-            user = User.objects.get_by_natural_key(email)
+            user = User.objects.get_by_natural_key(email.lower())
         except User.DoesNotExist:
             return Response({"error": {"code": "INVALID_CREDENTIALS", "message": "Неверный email или пароль"}}, status=status.HTTP_401_UNAUTHORIZED)
 
