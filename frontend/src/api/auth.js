@@ -1,10 +1,9 @@
 import api from "./axios";
 
-// Пока бэкенд не готов, работаем на моках.
-// Когда API заработает, поменять на false: страницы трогать не нужно.
-const USE_MOCK = true;
+// Моки выключены — работаем с реальным бэкендом
+const USE_MOCK = false;
 
-// Задержка для имитации сети
+// Задержка для имитации сети (используется только в моках)
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Создаёт ошибку в том же формате, что и перехватчик axios
@@ -73,11 +72,12 @@ export const logoutRequest = async () => {
 };
 
 // GET /api/users/me (#15): проверка сохранённого токена
+// Бэкенд возвращает пользователя напрямую, без обёртки { user }
 export const getMeRequest = async () => {
   if (USE_MOCK) {
     await delay(300);
     if (localStorage.getItem("token") === "fake-jwt-token") {
-      return { user: MOCK_USER };
+      return MOCK_USER; // без обёртки, как реальный бэкенд
     }
     throw createApiError("Не авторизован");
   }

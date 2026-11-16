@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { registerRequest } from "@/api/auth";
 import { Link, useNavigate } from "react-router-dom";
 import { useState } from "react";
 
@@ -100,8 +101,7 @@ function RegisterPage() {
     setIsLoading(true);
 
     try {
-      // TODO: заменить на registerRequest(fullName, email, password)
-      await fakeRegisterRequest(fullName, email, password);
+      await registerRequest(fullName, email, password);
       navigate("/login");
     } catch (err) {
       // Ошибки полей из API (error.details.fields)
@@ -258,24 +258,3 @@ function RegisterPage() {
 
 export default RegisterPage;
 
-// Временный мок. Удалить, когда появится registerRequest
-const fakeRegisterRequest = async (fullName, email) => {
-  await new Promise((resolve) => setTimeout(resolve, 800));
-
-  if (email === "test@itmo.ru") {
-    const error = new Error("Пользователь с таким email уже существует");
-    error.details = {
-      fields: { email: "Пользователь с таким email уже существует" },
-    };
-    throw error;
-  }
-
-  return {
-    user: {
-      id: crypto.randomUUID(),
-      email,
-      fullName,
-      createdAt: new Date().toISOString(),
-    },
-  };
-};
