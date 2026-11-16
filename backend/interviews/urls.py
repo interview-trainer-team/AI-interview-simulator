@@ -6,6 +6,7 @@ from .flow_views import (
     CurrentQuestionView,
     InterviewDetailView,
 )
+from .result_views import CompleteInterviewView, FeedbackRetryView, ResultsView
 from .views import DirectionListView, InterviewListCreateView
 
 urlpatterns = [
@@ -26,5 +27,20 @@ urlpatterns = [
         "api/interviews/<str:interview_id>/answers/<str:answer_id>/retry",
         AnswerRetryView.as_view(),
         name="answer-retry",
+    ),
+    path(
+        "api/interviews/<str:interview_id>/complete",
+        CompleteInterviewView.as_view(),
+        name="interview-complete",
+    ),
+    path(
+        "api/interviews/<str:interview_id>/results",
+        ResultsView.as_view(),
+        name="interview-results",
+    ),
+    path(
+        "api/interviews/<str:interview_id>/feedback/retry",
+        FeedbackRetryView.as_view(),
+        name="feedback-retry",
     ),
 ]
