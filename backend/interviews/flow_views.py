@@ -7,6 +7,7 @@ from .access import expire_stale_pending, get_user_interview, parse_uuid
 from .analysis import analyze_answer
 from .completion import finish_if_all_done
 from .errors import ApiError, ApiView
+from .feedback import run_feedback
 from .models import AnalysisStatus, Answer, Interview, InterviewStatus
 from .services import QUESTIONS_PER_INTERVIEW
 
@@ -196,8 +197,13 @@ class AnswerCreateView(ApiView):
         # Шаг 3. Если это был последний ответ и все разборы готовы, завершаем интервью
         with transaction.atomic():
             interview = Interview.objects.select_for_update().get(pk=interview.pk)
-            finish_if_all_done(interview)
+            finished = finish_if_all_done(interview)
             result = answer_result(interview, answer)
+
+        # Шаг 4. Интервью завершено: итоговые рекомендации тоже вне транзакции.
+        # Их сбой не мешает ответу: интервью остаётся завершённым, рекомендации получат FAILED
+        if finished:
+            run_feedback(interview)
         return Response(result, status=201)
 
 
@@ -229,6 +235,9 @@ class AnswerRetryView(ApiView):
                 )
 
             run_analysis(answer)
-            finish_if_all_done(interview)
+            finished = finish_if_all_done(interview)
             result = answer_result(interview, answer)
+
+        if finished:
+            run_feedback(interview)
         return Response(result)
