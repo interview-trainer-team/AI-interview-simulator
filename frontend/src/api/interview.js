@@ -174,7 +174,7 @@ export const createInterviewRequest = async ({ directionCode, levelCode }) => {
 // Получить интервью с вопросами
 export const getInterviewRequest = async (interviewId) => {
   const response = await api.get(`/interviews/${interviewId}`);
-  return response.data;
+  return { interview: response.data };
 };
 
 // Отправить ответ
@@ -183,13 +183,16 @@ export const submitAnswerRequest = async (interviewId, questionId, answerText) =
     questionId,
     answerText,
   });
-  return response.data;
+  return {
+    answer: response.data.answer || response.data,
+    interview: response.data.interview || response.data,
+  };
 };
 
 // Досрочно завершить
 export const finishInterviewRequest = async (interviewId) => {
   const response = await api.post(`/interviews/${interviewId}/complete`);
-  return response.data;
+  return { interview: response.data };
 };
 
 // Результаты

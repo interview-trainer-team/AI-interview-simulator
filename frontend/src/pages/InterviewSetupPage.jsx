@@ -58,7 +58,6 @@ function InterviewSetupPage() {
         directionCode: directionCode.trim(),
         levelCode,
       });
-      // бэкенд возвращает плоский объект с id
       navigate(`/interview/${data.id}`);
     } catch (err) {
       if (err.details?.fields) {
