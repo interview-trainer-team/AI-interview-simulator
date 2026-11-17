@@ -52,3 +52,27 @@ class RegisterSerializer(serializers.Serializer):
         if not re.search(r'\d', value):
             raise serializers.ValidationError("Пароль должен содержать хотя бы одну цифру")
         return value
+    
+
+class UpdateProfileSerializer(serializers.Serializer):
+    fullName = serializers.CharField(
+        required=True, 
+        min_length=2, 
+        max_length=150, 
+        trim_whitespace=True, 
+        error_messages={'blank': 'Заполните все поля', 'required': 'Заполните все поля', 'min_length': 'Имя должно быть не менее 2 символов'}
+    )
+
+class ChangePasswordSerializer(serializers.Serializer):
+    current_password = serializers.CharField(write_only=True, required=True, error_messages={'blank': 'Заполните все поля'})
+    new_password = serializers.CharField(write_only=True, required=True, error_messages={'blank': 'Заполните все поля'})
+
+    def validate_new_password(self, value):
+        if len(value) < 8 or len(value) > 30:
+            raise serializers.ValidationError("Пароль должен быть от 8 до 30 символов")
+        import re
+        if not re.search(r'[A-Z]', value) or not re.search(r'[a-z]', value):
+            raise serializers.ValidationError("Пароль должен содержать заглавные и строчные латинские буквы")
+        if not re.search(r'\d', value):
+            raise serializers.ValidationError("Пароль должен содержать хотя бы одну цифру")
+        return value
