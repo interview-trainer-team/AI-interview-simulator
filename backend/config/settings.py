@@ -151,7 +151,7 @@ CORS_ALLOWED_ORIGINS = [
 # Настройки SimpleJWT
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=int(os.getenv("JWT_EXPIRES_MINUTES", 60))),
-    'SIGNING_KEY': os.getenv("JWT_SECRET", SECRET_KEY),
+    'SIGNING_KEY': os.getenv("JWT_SECRET") or SECRET_KEY,
     'ALGORITHM': 'HS256',
     'AUTH_HEADER_TYPES': ('Bearer',),
     'USER_ID_CLAIM': 'sub',  # Ваня просил, чтобы id был в поле sub
