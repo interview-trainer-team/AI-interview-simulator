@@ -12,6 +12,7 @@ from .serializers import LoginSerializer, RegisterSerializer
 from .models import RevokedToken
 from .exceptions import EmailAlreadyExists
 from interviews.services import to_utc_iso 
+from django.utils import timezone as dj_timezone
 
 User = get_user_model()
 
@@ -87,6 +88,32 @@ class MeView(APIView):
             "fullName": user.full_name,
             "createdAt": to_utc_iso(user.created_at)
         })
+        
+    def patch(self, request):
+        from .serializers import UpdateProfileSerializer
+        serializer = UpdateProfileSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        user = request.user
+        user.full_name = serializer.validated_data['fullName']
+        user.save()
+        
+        return Response({
+            "id": str(user.id),
+            "email": user.email,
+            "fullName": user.full_name,
+            "createdAt": to_utc_iso(user.created_at)
+        }, status=status.HTTP_200_OK)
+
+    def delete(self, request):
+        password = request.data.get('password')
+        if not password or not request.user.check_password(password):
+            return Response(
+                {"error": {"code": "INVALID_PASSWORD", "message": "Неверный пароль", "details": {"fields": {"password": "Неверный пароль"}}}},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        request.user.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
@@ -102,3 +129,39 @@ class LogoutView(APIView):
             }
         )
         return Response(status=status.HTTP_204_NO_CONTENT)
+    
+
+
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def put(self, request):
+        from .serializers import ChangePasswordSerializer
+        serializer = ChangePasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = request.user
+        if not user.check_password(serializer.validated_data['current_password']):
+            return Response(
+                {"error": {"code": "INVALID_CURRENT_PASSWORD", "message": "Неверный текущий пароль", "details": {"fields": {"current_password": "Неверный пароль"}}}},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        new_password = serializer.validated_data['new_password']
+        if user.check_password(new_password):
+            return Response(
+                {"error": {"code": "SAME_PASSWORD", "message": "Новый пароль совпадает со старым", "details": {"fields": {"new_password": "Введите другой пароль"}}}},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user.set_password(new_password)
+        user.password_changed_at = dj_timezone.now() # Обновляем время смены пароля!
+        user.save()
+
+        # Выдаем новый токен, так как старый теперь невалиден
+        token = AccessToken.for_user(user)
+        return Response({
+            "accessToken": str(token),
+            "tokenType": "Bearer",
+            "expiresIn": int(settings.SIMPLE_JWT.get('ACCESS_TOKEN_LIFETIME').total_seconds())
+        }, status=status.HTTP_200_OK)
