@@ -8,7 +8,6 @@ import { createInterviewRequest, findLevelCode } from "@/api/interview";
 const inputClass =
   "h-12 rounded-lg border-[#2E322E] bg-[#222522] px-4 text-sm text-white placeholder:text-gray-500 focus-visible:border-[#D2FF52] focus-visible:ring-[#D2FF52]/40";
 
-// Одно поле формы: салатовый заголовок, серая подсказка, инпут и ошибка
 function Field({ id, label, hint, error, ...inputProps }) {
   return (
     <div className="space-y-2">
@@ -31,9 +30,8 @@ function ArrowIcon() {
 }
 
 function InterviewSetupPage() {
-  const [direction, setDirection] = useState("");
+  const [directionCode, setDirectionCode] = useState("");
   const [level, setLevel] = useState("");
-  const [topics, setTopics] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -44,9 +42,8 @@ function InterviewSetupPage() {
     e.preventDefault();
     setError("");
 
-    // Проверяем обязательные поля
     const errors = {};
-    if (!direction.trim()) errors.direction = "Укажи IT-направление";
+    if (!directionCode.trim()) errors.directionCode = "Укажи IT-направление";
 
     const levelCode = findLevelCode(level);
     if (!level.trim()) errors.level = "Укажи уровень подготовки";
@@ -58,12 +55,10 @@ function InterviewSetupPage() {
     setIsLoading(true);
     try {
       const data = await createInterviewRequest({
-        direction: direction.trim(),
+        directionCode: directionCode.trim(),
         levelCode,
-        topics: topics.trim(),
       });
-      // Переходим к прохождению созданного интервью
-      navigate(`/interview/${data.interview.id}`);
+      navigate(`/interview/${data.id}`);
     } catch (err) {
       if (err.details?.fields) {
         setFieldErrors(err.details.fields);
@@ -94,13 +89,13 @@ function InterviewSetupPage() {
 
           <div className="mt-8 space-y-9">
             <Field
-              id="direction"
+              id="directionCode"
               label="IT-направление"
-              hint="В какой области ты хочешь пройти собеседование?"
-              placeholder="Например, Frontend-разработка"
-              value={direction}
-              onChange={(e) => setDirection(e.target.value)}
-              error={fieldErrors.direction}
+              hint="Код направления (например, backend_python)"
+              placeholder="backend_python"
+              value={directionCode}
+              onChange={(e) => setDirectionCode(e.target.value)}
+              error={fieldErrors.directionCode}
             />
             <Field
               id="level"
@@ -110,15 +105,6 @@ function InterviewSetupPage() {
               value={level}
               onChange={(e) => setLevel(e.target.value)}
               error={fieldErrors.level}
-            />
-            <Field
-              id="topics"
-              label="Дополнительная информация"
-              hint="Необязательно: укажи темы, которые хочешь потренировать."
-              placeholder="Например, JavaScript, React, работа с API..."
-              value={topics}
-              onChange={(e) => setTopics(e.target.value)}
-              error={fieldErrors.topics}
             />
           </div>
         </div>

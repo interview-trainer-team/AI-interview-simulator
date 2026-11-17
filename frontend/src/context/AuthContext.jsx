@@ -41,8 +41,9 @@ export function AuthProvider({ children }) {
 
     getMeRequest()
       .then((data) => {
-        setUser(data.user);
-        localStorage.setItem("user", JSON.stringify(data.user));
+        // Бэкенд возвращает пользователя напрямую, без обёртки { user }
+        setUser(data);
+        localStorage.setItem("user", JSON.stringify(data));
       })
       .catch(() => {
         clearSession();
