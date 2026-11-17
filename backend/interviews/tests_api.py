@@ -3,7 +3,16 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from .models import Direction, Interview, InterviewStatus, Level, Question
+from .models import (
+    Answer,
+    Direction,
+    Interview,
+    InterviewQuestion,
+    InterviewStatus,
+    Level,
+    Question,
+)
+from .services import pick_bank_questions
 
 User = get_user_model()
 
@@ -125,15 +134,19 @@ class InterviewHistoryApiTests(ApiTestCase):
         other = User.objects.create_user(
             email="other@example.com", password="Secret123", full_name="Другой"
         )
+        # created_at задан явно: на Windows время считается грубо, и два интервью подряд
+        # могли бы получить одинаковый created_at
         old = self.make_interview(
             status=InterviewStatus.COMPLETED,
             total_score=6.5,
+            created_at=timezone.now() - timezone.timedelta(days=2),
             completed_at=timezone.now() - timezone.timedelta(days=1),
         )
         new = self.make_interview(
             status=InterviewStatus.COMPLETED,
             total_score=8,
             finished_early=True,
+            created_at=timezone.now() - timezone.timedelta(days=1),
             completed_at=timezone.now(),
         )
         self.make_interview(status=InterviewStatus.IN_PROGRESS)  # не в истории
@@ -149,6 +162,26 @@ class InterviewHistoryApiTests(ApiTestCase):
         self.assertEqual(items[0]["directionName"], "Backend-разработка (Python)")
         self.assertEqual(items[0]["levelName"], "Junior")
         self.assertTrue(items[0]["completedAt"].endswith("Z"))
+        self.assertTrue(items[0]["createdAt"].endswith("Z"))
+        self.assertEqual(items[0]["answeredCount"], 0)
+
+    def test_answered_count_counts_only_answers_of_this_interview(self):
+        first = self.make_interview(status=InterviewStatus.IN_PROGRESS)
+        links = InterviewQuestion.objects.bulk_create(
+            [
+                InterviewQuestion(interview=first, question=question, position=position)
+                for position, question in enumerate(
+                    pick_bank_questions(first.direction, first.level), start=1
+                )
+            ]
+        )
+        for link in links[:3]:
+            Answer.objects.create(interview_question=link, answer_text="ответ")
+        response = self.client.get(INTERVIEWS_URL, {"status": "ACTIVE"})
+        item = response.data["items"][0]
+        self.assertEqual(item["answeredCount"], 3)  # без дублей из-за связанных таблиц
+        self.assertIsNone(item["completedAt"])
+        self.assertTrue(item["createdAt"].endswith("Z"))
 
     def test_status_active_returns_created_and_in_progress(self):
         active = self.make_interview(status=InterviewStatus.IN_PROGRESS)

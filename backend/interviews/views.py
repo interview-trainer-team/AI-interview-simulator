@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.db.models import Count
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -119,10 +120,14 @@ class InterviewListCreateView(APIView):
                 {"fields": {"status": "Допустимые значения: COMPLETED, ACTIVE"}},
             )
 
-        interviews = Interview.objects.filter(
-            user=request.user, status__in=statuses
-        ).select_related("direction", "level")  # новые сверху: порядок модели -created_at
-
+        interviews = (
+            Interview.objects.filter(user=request.user, status__in=statuses)
+            .select_related("direction", "level")
+            .annotate(answered_count=Count("interview_questions__answer"))
+            # С annotate Django игнорирует Meta.ordering модели, поэтому сортировка задана явно
+            .order_by("-created_at")  # новые сверху
+        )
+            
         return Response(
             {
                 "items": [
@@ -132,8 +137,10 @@ class InterviewListCreateView(APIView):
                         "directionName": i.direction.name,
                         "levelName": i.level.name,
                         "finishedEarly": i.finished_early,
+                        "createdAt": to_utc_iso(i.created_at),
                         "completedAt": to_utc_iso(i.completed_at),
                         "totalScore": float(i.total_score) if i.total_score is not None else None,
+                        "answeredCount": i.answered_count,
                     }
                     for i in interviews
                 ]
