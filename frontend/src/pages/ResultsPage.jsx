@@ -3,13 +3,12 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   getInterviewResultsRequest,
+  retryFeedbackRequest,
   getLevelName,
   getLevelVerdict,
   getVerdictInfo,
   QUESTIONS_PER_INTERVIEW,
 } from "@/api/interview";
-
-// ---------- ИКОНКИ ----------
 
 function ChevronIcon({ open }) {
   return (
@@ -30,9 +29,6 @@ function ChevronIcon({ open }) {
   );
 }
 
-// ---------- ВСПОМОГАТЕЛЬНОЕ ----------
-
-// Дата в формате «10 ноября 2026»
 function formatDate(isoString) {
   if (!isoString) return "";
   return new Date(isoString).toLocaleDateString("ru-RU", {
@@ -58,9 +54,6 @@ function getCriterionValue(criteria, key) {
   return criteria[key] ?? 0;
 }
 
-// ---------- КОМПОНЕНТЫ ----------
-
-// Кольцо итогового балла: X.X / 10
 function ScoreCircle({ score, color }) {
   const size = 180;
   const stroke = 10;
@@ -93,7 +86,6 @@ function ScoreCircle({ score, color }) {
   );
 }
 
-// Полоска оценки по одному критерию (0–10)
 function CriterionBar({ label, value }) {
   const percent = Math.min(Math.max(Number(value) || 0, 0), 10) * 10;
 
@@ -127,7 +119,6 @@ function TopicList({ title, items, emptyText }) {
   );
 }
 
-// Карточка одного вопроса: оценка, критерии, раскрывающийся разбор
 function AnswerCard({ item, isOpen, onToggle }) {
   const unanswered = item.score == null && !item.answerText;
   const headingId = `answer-${item.position}-title`;
@@ -217,8 +208,6 @@ function AnswerCard({ item, isOpen, onToggle }) {
   );
 }
 
-// ---------- СТРАНИЦА ----------
-
 function ResultsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -229,8 +218,8 @@ function ResultsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [openPosition, setOpenPosition] = useState(null);
+  const [isRetryingFeedback, setIsRetryingFeedback] = useState(false);
 
-  // Загружаем результаты; если интервью ещё идёт — возвращаем в чат
   useEffect(() => {
     setIsLoading(true);
     setError("");
@@ -254,6 +243,18 @@ function ResultsPage() {
       })
       .finally(() => setIsLoading(false));
   }, [id, navigate]);
+
+  const handleRetryFeedback = async () => {
+    setIsRetryingFeedback(true);
+    try {
+      const data = await retryFeedbackRequest(id);
+      setFeedback(data);
+    } catch (err) {
+      setError(err.message || "Не удалось повторить рекомендации");
+    } finally {
+      setIsRetryingFeedback(false);
+    }
+  };
 
   if (isLoading) {
     return <p className="text-sm text-gray-400">Загружаем результаты...</p>;
@@ -280,14 +281,12 @@ function ResultsPage() {
 
   return (
     <div className="mx-auto max-w-[960px]">
-      {/* Шапка: заголовок, направление, уровень и дата */}
       <p className="text-[10px] font-semibold uppercase tracking-wider text-[#D2FF52]">Результаты интервью</p>
       <h1 className="mt-3 text-2xl font-bold tracking-tight md:text-3xl">
         {interview.direction} · {getLevelName(interview.levelCode)}
       </h1>
       <p className="mt-2 text-sm text-gray-400">{formatDate(interview.completedAt || interview.createdAt)}</p>
 
-      {/* Итоговый балл и вердикт */}
       <section className="mt-8 rounded-2xl border border-[#2E322E] bg-[#1F221F] px-5 py-8 text-center md:px-8">
         <ScoreCircle score={interview.totalScore} color={verdictInfo.color} />
         <p className="mt-5 text-lg font-semibold" style={{ color: verdictInfo.color }}>
@@ -301,7 +300,6 @@ function ResultsPage() {
         )}
       </section>
 
-      {/* Разбор каждого ответа */}
       <section className="mt-8">
         <h2 className="text-lg font-semibold">Разбор ответов</h2>
         <div className="mt-4 space-y-3">
@@ -316,14 +314,23 @@ function ResultsPage() {
         </div>
       </section>
 
-      {/* Итоговая обратная связь ИИ */}
       <section className="mt-8 rounded-2xl border border-[#2E322E] bg-[#1F221F] p-5 md:p-6">
         <h2 className="text-lg font-semibold">Обратная связь ИИ</h2>
 
         {feedback?.status === "FAILED" || !feedback ? (
-          <p className="mt-4 text-sm text-gray-400">
-            Итоговые рекомендации пока не сформированы. Оценки по вопросам уже доступны в разборе ответов.
-          </p>
+          <div className="mt-4">
+            <p className="text-sm text-gray-400">
+              Итоговые рекомендации пока не сформированы. Оценки по вопросам уже доступны в разборе ответов.
+            </p>
+            <Button
+              type="button"
+              onClick={handleRetryFeedback}
+              disabled={isRetryingFeedback}
+              className="mt-4 h-10 rounded-lg bg-[#D2FF52] px-4 text-sm font-semibold text-black hover:bg-[#bce646]"
+            >
+              {isRetryingFeedback ? "Повторяем..." : "Повторить рекомендации"}
+            </Button>
+          </div>
         ) : (
           <>
             {feedback.summary && <p className="mt-4 text-sm leading-relaxed text-gray-300">{feedback.summary}</p>}
