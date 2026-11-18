@@ -1,9 +1,7 @@
 import api from "./axios";
 
-// Количество вопросов в интервью
 export const QUESTIONS_PER_INTERVIEW = 5;
 
-// Уровни из справочника levels
 export const LEVELS = [
   { code: "junior", name: "Junior" },
   { code: "middle", name: "Middle" },
@@ -163,21 +161,21 @@ function normalizeInterviewList(data) {
   return raw.map(toInterviewListItem).sort((a, b) => interviewSortTime(b) - interviewSortTime(a));
 }
 
-// ---------- ЗАПРОСЫ ----------
+export const getDirectionsRequest = async () => {
+  const response = await api.get("/directions");
+  return response.data;
+};
 
-// Создание интервью
 export const createInterviewRequest = async ({ directionCode, levelCode }) => {
   const response = await api.post("/interviews", { directionCode, levelCode });
   return response.data;
 };
 
-// Получить интервью с вопросами
 export const getInterviewRequest = async (interviewId) => {
   const response = await api.get(`/interviews/${interviewId}`);
   return { interview: response.data };
 };
 
-// Отправить ответ
 export const submitAnswerRequest = async (interviewId, questionId, answerText) => {
   const response = await api.post(`/interviews/${interviewId}/answers`, {
     questionId,
@@ -189,13 +187,11 @@ export const submitAnswerRequest = async (interviewId, questionId, answerText) =
   };
 };
 
-// Досрочно завершить
 export const finishInterviewRequest = async (interviewId) => {
   const response = await api.post(`/interviews/${interviewId}/complete`);
   return { interview: response.data };
 };
 
-// Результаты
 export const getInterviewResultsRequest = async (interviewId) => {
   try {
     const response = await api.get(`/interviews/${interviewId}/results`);
@@ -213,7 +209,6 @@ export const getInterviewResultsRequest = async (interviewId) => {
   }
 };
 
-// Список интервью (история)
 export const getInterviewsRequest = async () => {
   const response = await api.get("/interviews");
   return { interviews: normalizeInterviewList(response.data) };

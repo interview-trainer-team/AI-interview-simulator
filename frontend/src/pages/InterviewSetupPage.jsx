@@ -1,21 +1,23 @@
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useNavigate } from "react-router-dom";
-import { useState } from "react";
-import { createInterviewRequest, findLevelCode } from "@/api/interview";
+import { useEffect, useState } from "react";
+import { createInterviewRequest, getDirectionsRequest, findLevelCode } from "@/api/interview";
 
 const inputClass =
   "h-12 rounded-lg border-[#2E322E] bg-[#222522] px-4 text-sm text-white placeholder:text-gray-500 focus-visible:border-[#D2FF52] focus-visible:ring-[#D2FF52]/40";
 
-function Field({ id, label, hint, error, ...inputProps }) {
+const selectClass =
+  "h-12 w-full rounded-lg border border-[#2E322E] bg-[#222522] px-4 text-sm text-white focus:border-[#D2FF52] focus:outline-none focus:ring-2 focus:ring-[#D2FF52]/40";
+
+function Field({ id, label, hint, error, children }) {
   return (
     <div className="space-y-2">
       <Label htmlFor={id} className="text-sm font-semibold text-[#D2FF52]">
         {label}
       </Label>
       <p className="text-[11px] text-gray-400">{hint}</p>
-      <Input id={id} className={inputClass} aria-invalid={!!error} {...inputProps} />
+      {children}
       {error && <p className="text-sm text-red-500">{error}</p>}
     </div>
   );
@@ -30,20 +32,33 @@ function ArrowIcon() {
 }
 
 function InterviewSetupPage() {
+  const [directions, setDirections] = useState([]);
   const [directionCode, setDirectionCode] = useState("");
   const [level, setLevel] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingDirections, setIsLoadingDirections] = useState(true);
 
   const navigate = useNavigate();
+
+  useEffect(() => {
+    getDirectionsRequest()
+      .then((data) => {
+        setDirections(data.directions || []);
+      })
+      .catch(() => {
+        setError("Не удалось загрузить список направлений");
+      })
+      .finally(() => setIsLoadingDirections(false));
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
     const errors = {};
-    if (!directionCode.trim()) errors.directionCode = "Укажи IT-направление";
+    if (!directionCode) errors.directionCode = "Выбери IT-направление";
 
     const levelCode = findLevelCode(level);
     if (!level.trim()) errors.level = "Укажи уровень подготовки";
@@ -55,7 +70,7 @@ function InterviewSetupPage() {
     setIsLoading(true);
     try {
       const data = await createInterviewRequest({
-        directionCode: directionCode.trim(),
+        directionCode,
         levelCode,
       });
       navigate(`/interview/${data.id}`);
@@ -91,21 +106,42 @@ function InterviewSetupPage() {
             <Field
               id="directionCode"
               label="IT-направление"
-              hint="Код направления (например, backend_python)"
-              placeholder="backend_python"
-              value={directionCode}
-              onChange={(e) => setDirectionCode(e.target.value)}
+              hint="Выбери направление собеседования"
               error={fieldErrors.directionCode}
-            />
+            >
+              <select
+                id="directionCode"
+                value={directionCode}
+                onChange={(e) => setDirectionCode(e.target.value)}
+                className={selectClass}
+                disabled={isLoadingDirections}
+              >
+                <option value="">
+                  {isLoadingDirections ? "Загружаем..." : "Выбери направление"}
+                </option>
+                {directions.map((dir) => (
+                  <option key={dir.code} value={dir.code}>
+                    {dir.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+
             <Field
               id="level"
               label="Уровень подготовки"
               hint="Укажи свой текущий уровень знаний и опыта."
-              placeholder="Например, Junior или Middle"
-              value={level}
-              onChange={(e) => setLevel(e.target.value)}
               error={fieldErrors.level}
-            />
+            >
+              <input
+                id="level"
+                type="text"
+                placeholder="Например, Junior или Middle"
+                value={level}
+                onChange={(e) => setLevel(e.target.value)}
+                className={inputClass}
+              />
+            </Field>
           </div>
         </div>
 
@@ -117,7 +153,7 @@ function InterviewSetupPage() {
           </p>
           <Button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || isLoadingDirections}
             className="h-12 w-full shrink-0 gap-4 rounded-lg bg-[#D2FF52] px-6 text-sm font-semibold text-black hover:bg-[#bce646] sm:w-auto"
           >
             {isLoading ? "Создаём..." : "Начать интервью"}
