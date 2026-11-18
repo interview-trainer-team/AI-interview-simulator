@@ -9,8 +9,6 @@ import {
   QUESTIONS_PER_INTERVIEW,
 } from "@/api/interview";
 
-// ---------- ИКОНКИ ----------
-
 function ArrowIcon() {
   return (
     <svg
@@ -29,9 +27,6 @@ function ArrowIcon() {
   );
 }
 
-// ---------- ВСПОМОГАТЕЛЬНОЕ ----------
-
-// Дата в формате «10 ноября 2026»
 function formatDate(isoString) {
   if (!isoString) return "";
   return new Date(isoString).toLocaleDateString("ru-RU", {
@@ -70,8 +65,6 @@ function getStatusBadge(interview) {
   }
   return { text: "В процессе", className: "border-[#2E322E] bg-[#262A26] text-gray-300" };
 }
-
-// ---------- КОМПОНЕНТЫ ----------
 
 function StatCard({ label, value, color }) {
   return (
@@ -129,28 +122,26 @@ function InterviewCard({ interview }) {
   );
 }
 
-// ---------- СТРАНИЦА ----------
-
 function HistoryPage() {
   const [interviews, setInterviews] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("all");
 
-  // Загружаем список интервью пользователя
   useEffect(() => {
     setIsLoading(true);
     setError("");
 
-    getInterviewsRequest()
+    const statusParam = filter === "active" ? "ACTIVE" : filter === "completed" ? "COMPLETED" : undefined;
+
+    getInterviewsRequest(statusParam)
       .then((data) => setInterviews(data.interviews || []))
       .catch((err) => setError(err.message || "Не удалось загрузить историю"))
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [filter]);
 
   const completed = useMemo(() => interviews.filter(isCompleted), [interviews]);
 
-  // Сводка: средний и лучший балл считаем только по завершённым интервью
   const stats = useMemo(() => {
     const scored = completed.filter((item) => item.totalScore != null);
     const average =
@@ -200,7 +191,6 @@ function HistoryPage() {
         Все твои тренировочные собеседования: можно открыть результаты или продолжить незавершённое интервью.
       </p>
 
-      {/* Сводные показатели по всем интервью */}
       <section className="mt-8 grid gap-3 sm:grid-cols-3">
         <StatCard label="Всего интервью" value={stats.total} />
         <StatCard
@@ -215,7 +205,6 @@ function HistoryPage() {
         />
       </section>
 
-      {/* Фильтры списка */}
       <div role="tablist" aria-label="Фильтр интервью" className="mt-8 flex flex-wrap gap-2">
         {FILTERS.map((item) => {
           const active = filter === item.id;
@@ -241,7 +230,6 @@ function HistoryPage() {
         })}
       </div>
 
-      {/* Список интервью или пустое состояние */}
       {interviews.length === 0 ? (
         <div className="mt-6 rounded-2xl border border-[#2E322E] bg-[#1F221F] px-5 py-10 text-center">
           <p className="text-base font-semibold">Пока нет интервью</p>
