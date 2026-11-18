@@ -1,3 +1,7 @@
+/**
+ * API-слой профиля пользователя.
+ * Все запросы требуют Bearer-токен.
+ */
 import api from "./axios";
 
 function createApiError(message, fields) {
@@ -6,6 +10,11 @@ function createApiError(message, fields) {
   return error;
 }
 
+/**
+ * Валидация ФИО: 2–150 символов после trim.
+ * @param {string} fullName
+ * @returns {string} сообщение об ошибке или пустая строка
+ */
 export function validateFullName(fullName) {
   const value = String(fullName || "").trim();
   if (value.length < 2 || value.length > 150) {
@@ -14,6 +23,11 @@ export function validateFullName(fullName) {
   return "";
 }
 
+/**
+ * Валидация смены пароля (клиентская).
+ * @param {{currentPassword: string, newPassword: string, repeatPassword: string}} params
+ * @returns {{field: string, message: string}} пустой field/месседж если всё ок
+ */
 export function validatePasswordChange({ currentPassword, newPassword, repeatPassword }) {
   if (!String(currentPassword || "").trim()) {
     return { field: "currentPassword", message: "Укажи текущий пароль" };
@@ -36,6 +50,11 @@ export function validatePasswordChange({ currentPassword, newPassword, repeatPas
   return { field: "", message: "" };
 }
 
+/**
+ * Обновляет ФИО текущего пользователя.
+ * @param {{fullName: string}} params
+ * @returns {Promise<object>} актуальный объект пользователя
+ */
 export const updateFullNameRequest = async ({ fullName }) => {
   const message = validateFullName(fullName);
   if (message) throw createApiError(message, { fullName: message });
@@ -44,6 +63,11 @@ export const updateFullNameRequest = async ({ fullName }) => {
   return response.data;
 };
 
+/**
+ * Меняет пароль. В ответе приходит новый accessToken.
+ * @param {{currentPassword: string, newPassword: string}} params
+ * @returns {Promise<{accessToken: string}>}
+ */
 export const changePasswordRequest = async ({ currentPassword, newPassword }) => {
   const response = await api.put("/users/me/password", {
     currentPassword,
@@ -52,6 +76,11 @@ export const changePasswordRequest = async ({ currentPassword, newPassword }) =>
   return response.data;
 };
 
+/**
+ * Удаляет аккаунт (требует подтверждение паролем).
+ * @param {{password: string}} params
+ * @returns {Promise<void>}
+ */
 export const deleteAccountRequest = async ({ password }) => {
   const response = await api.delete("/users/me", { data: { password } });
   return response.data;
