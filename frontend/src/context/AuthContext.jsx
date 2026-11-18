@@ -4,7 +4,6 @@ import { getMeRequest, logoutRequest } from "@/api/auth";
 
 const AuthContext = createContext(null);
 
-// Безопасно читаем пользователя из localStorage (битые данные просто удаляем)
 function readSavedUser() {
   try {
     const savedUser = localStorage.getItem("user");
@@ -17,7 +16,6 @@ function readSavedUser() {
   return null;
 }
 
-// Полная очистка данных сессии
 function clearSession() {
   localStorage.removeItem("user");
   localStorage.removeItem("token");
@@ -25,13 +23,11 @@ function clearSession() {
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(readSavedUser);
-  // true, пока проверяем сохранённый токен через GET /api/users/me
   const [isCheckingAuth, setIsCheckingAuth] = useState(
     () => !!localStorage.getItem("token")
   );
   const navigate = useNavigate();
 
-  // При запуске приложения не верим localStorage, а спрашиваем бэкенд (#15)
   useEffect(() => {
     if (!localStorage.getItem("token")) {
       clearSession();
@@ -41,7 +37,6 @@ export function AuthProvider({ children }) {
 
     getMeRequest()
       .then((data) => {
-        // Бэкенд возвращает пользователя напрямую, без обёртки { user }
         setUser(data);
         localStorage.setItem("user", JSON.stringify(data));
       })
@@ -59,12 +54,20 @@ export function AuthProvider({ children }) {
     navigate("/");
   };
 
-  // Выход (#17): сообщаем бэкенду, но токен чистим при любом ответе
+  const updateUser = (userData) => {
+    setUser(userData);
+    localStorage.setItem("user", JSON.stringify(userData));
+  };
+
+  const updateToken = (accessToken) => {
+    localStorage.setItem("token", accessToken);
+  };
+
   const logout = async () => {
     try {
       await logoutRequest();
     } catch {
-      // Ошибку игнорируем: локально пользователь всё равно выходит
+      // ignore
     } finally {
       clearSession();
       setUser(null);
@@ -73,7 +76,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isCheckingAuth, login, logout }}>
+    <AuthContext.Provider value={{ user, isCheckingAuth, login, logout, updateUser, updateToken }}>
       {children}
     </AuthContext.Provider>
   );
