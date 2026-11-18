@@ -1,9 +1,12 @@
+/**
+ * API-слой интервью.
+ * Все запросы идут через axios-инстанс с базовым URL `/api`.
+ * Ответы бэкенда нормализуются в формат, удобный для страниц.
+ */
 import api from "./axios";
 
-// Количество вопросов в интервью
 export const QUESTIONS_PER_INTERVIEW = 5;
 
-// Уровни из справочника levels
 export const LEVELS = [
   { code: "junior", name: "Junior" },
   { code: "middle", name: "Middle" },
@@ -163,39 +166,60 @@ function normalizeInterviewList(data) {
   return raw.map(toInterviewListItem).sort((a, b) => interviewSortTime(b) - interviewSortTime(a));
 }
 
-// ---------- ЗАПРОСЫ ----------
+export const getDirectionsRequest = async () => {
+  const response = await api.get("/directions");
+  return response.data;
+};
 
-// Создание интервью
 export const createInterviewRequest = async ({ directionCode, levelCode }) => {
   const response = await api.post("/interviews", { directionCode, levelCode });
   return response.data;
 };
 
-// Получить интервью с вопросами
 export const getInterviewRequest = async (interviewId) => {
   const response = await api.get(`/interviews/${interviewId}`);
   return { interview: response.data };
 };
 
-// Отправить ответ
+export const getCurrentQuestionRequest = async (interviewId) => {
+  const response = await api.get(`/interviews/${interviewId}/questions/current`);
+  return response.data;
+};
+
 export const submitAnswerRequest = async (interviewId, questionId, answerText) => {
   const response = await api.post(`/interviews/${interviewId}/answers`, {
     questionId,
     answerText,
   });
-  return {
-    answer: response.data.answer || response.data,
-    interview: response.data.interview || response.data,
-  };
+  return response.data;
 };
 
-// Досрочно завершить
+/**
+ * Повторяет анализ ответа со статусом FAILED.
+ * @param {string} interviewId
+ * @param {string} answerId
+ * @returns {Promise<{answerId: string, analysisStatus: string, analysis: object|null, interviewStatus: string, nextPosition: number|null}>}
+ */
+export const retryAnswerAnalysisRequest = async (interviewId, answerId) => {
+  const response = await api.post(`/interviews/${interviewId}/answers/${answerId}/retry`);
+  return response.data;
+};
+
+/**
+ * Повторяет формирование итоговых рекомендаций.
+ * @param {string} interviewId
+ * @returns {Promise<object>}
+ */
+export const retryFeedbackRequest = async (interviewId) => {
+  const response = await api.post(`/interviews/${interviewId}/feedback/retry`);
+  return response.data;
+};
+
 export const finishInterviewRequest = async (interviewId) => {
   const response = await api.post(`/interviews/${interviewId}/complete`);
-  return { interview: response.data };
+  return response.data;
 };
 
-// Результаты
 export const getInterviewResultsRequest = async (interviewId) => {
   try {
     const response = await api.get(`/interviews/${interviewId}/results`);
@@ -213,8 +237,8 @@ export const getInterviewResultsRequest = async (interviewId) => {
   }
 };
 
-// Список интервью (история)
-export const getInterviewsRequest = async () => {
-  const response = await api.get("/interviews");
+export const getInterviewsRequest = async (status) => {
+  const params = status && status !== "all" ? { status: status.toUpperCase() } : {};
+  const response = await api.get("/interviews", { params });
   return { interviews: normalizeInterviewList(response.data) };
 };
