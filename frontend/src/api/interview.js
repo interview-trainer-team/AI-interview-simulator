@@ -1,3 +1,8 @@
+/**
+ * API-слой интервью.
+ * Все запросы идут через axios-инстанс с базовым URL `/api`.
+ * Ответы бэкенда нормализуются в формат, удобный для страниц.
+ */
 import api from "./axios";
 
 export const QUESTIONS_PER_INTERVIEW = 5;
@@ -176,20 +181,43 @@ export const getInterviewRequest = async (interviewId) => {
   return { interview: response.data };
 };
 
+export const getCurrentQuestionRequest = async (interviewId) => {
+  const response = await api.get(`/interviews/${interviewId}/questions/current`);
+  return response.data;
+};
+
 export const submitAnswerRequest = async (interviewId, questionId, answerText) => {
   const response = await api.post(`/interviews/${interviewId}/answers`, {
     questionId,
     answerText,
   });
-  return {
-    answer: response.data.answer || response.data,
-    interview: response.data.interview || response.data,
-  };
+  return response.data;
+};
+
+/**
+ * Повторяет анализ ответа со статусом FAILED.
+ * @param {string} interviewId
+ * @param {string} answerId
+ * @returns {Promise<{answerId: string, analysisStatus: string, analysis: object|null, interviewStatus: string, nextPosition: number|null}>}
+ */
+export const retryAnswerAnalysisRequest = async (interviewId, answerId) => {
+  const response = await api.post(`/interviews/${interviewId}/answers/${answerId}/retry`);
+  return response.data;
+};
+
+/**
+ * Повторяет формирование итоговых рекомендаций.
+ * @param {string} interviewId
+ * @returns {Promise<object>}
+ */
+export const retryFeedbackRequest = async (interviewId) => {
+  const response = await api.post(`/interviews/${interviewId}/feedback/retry`);
+  return response.data;
 };
 
 export const finishInterviewRequest = async (interviewId) => {
   const response = await api.post(`/interviews/${interviewId}/complete`);
-  return { interview: response.data };
+  return response.data;
 };
 
 export const getInterviewResultsRequest = async (interviewId) => {
@@ -209,7 +237,8 @@ export const getInterviewResultsRequest = async (interviewId) => {
   }
 };
 
-export const getInterviewsRequest = async () => {
-  const response = await api.get("/interviews");
+export const getInterviewsRequest = async (status) => {
+  const params = status && status !== "all" ? { status: status.toUpperCase() } : {};
+  const response = await api.get("/interviews", { params });
   return { interviews: normalizeInterviewList(response.data) };
 };
