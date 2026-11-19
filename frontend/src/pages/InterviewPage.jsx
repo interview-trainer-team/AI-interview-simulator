@@ -3,13 +3,13 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   getInterviewRequest,
+  getCurrentQuestionRequest,
   submitAnswerRequest,
+  retryAnswerAnalysisRequest,
   finishInterviewRequest,
   getLevelName,
   QUESTIONS_PER_INTERVIEW,
 } from "@/api/interview";
-
-// ---------- ИКОНКИ ----------
 
 function BotIcon({ className = "" }) {
   return (
@@ -36,59 +36,13 @@ function CheckIcon() {
   );
 }
 
-// ---------- ВСПОМОГАТЕЛЬНОЕ ----------
-
-// Время в формате 12:25
 function formatTime(isoString) {
   if (!isoString) return "";
   return new Date(isoString).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 }
 
-// Собираем ленту чата из вопросов интервью:
-// приветствие → вопрос → ответ → разбор → следующий вопрос ...
-function buildMessages(interview) {
-  const messages = [
-    {
-      id: "greeting",
-      author: "ai",
-      text: `Привет! Давай начнём техническое собеседование по направлению «${interview.direction}». Будет ${QUESTIONS_PER_INTERVIEW} вопросов, отвечай своими словами.`,
-      time: interview.startedAt,
-    },
-  ];
-
-  for (const question of interview.questions) {
-    messages.push({
-      id: `q-${question.id}`,
-      author: "ai",
-      text: `Вопрос ${question.position}. ${question.text}`,
-    });
-
-    // Дальше первого вопроса без ответа ленту не строим
-    if (!question.answer) break;
-
-    messages.push({
-      id: `a-${question.id}`,
-      author: "user",
-      text: question.answer.answerText,
-      time: question.answer.createdAt,
-    });
-    messages.push({
-      id: `f-${question.id}`,
-      author: "ai",
-      text: `Оценка: ${question.answer.score}/10. ${question.answer.recommendation}`,
-      time: question.answer.analyzedAt,
-    });
-  }
-
-  return messages;
-}
-
-// ---------- КОМПОНЕНТЫ ----------
-
-// Одно сообщение в чате
-function ChatMessage({ author, text, time }) {
+function ChatMessage({ author, text, time, onRetry, isRetrying }) {
   const isAi = author === "ai";
-
   return (
     <div className={`flex gap-3 ${isAi ? "justify-start" : "justify-end"}`}>
       {isAi && <BotIcon className="mt-3 shrink-0 text-[#D2FF52]" />}
@@ -101,13 +55,22 @@ function ChatMessage({ author, text, time }) {
           {isAi ? "ИИ-интервьюер" : "Твой ответ"}
         </p>
         <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-gray-200">{text}</p>
+        {onRetry && (
+          <Button
+            type="button"
+            onClick={onRetry}
+            disabled={isRetrying}
+            className="mt-3 h-9 rounded-lg bg-[#D2FF52] px-3 text-xs font-semibold text-black hover:bg-[#bce646]"
+          >
+            {isRetrying ? "Повторяем..." : "Повторить анализ"}
+          </Button>
+        )}
         {time && <p className="mt-1 text-right text-[10px] text-gray-500">{formatTime(time)}</p>}
       </div>
     </div>
   );
 }
 
-// Индикатор «ИИ анализирует ответ»
 function TypingMessage() {
   return (
     <div className="flex gap-3">
@@ -120,16 +83,15 @@ function TypingMessage() {
   );
 }
 
-// Шаги интервью в боковой панели: пройден, текущий, впереди
-function QuestionSteps({ questions, currentPosition, isCompleted }) {
+function QuestionSteps({ answeredCount, currentPosition, isCompleted }) {
+  const steps = Array.from({ length: QUESTIONS_PER_INTERVIEW }, (_, i) => i + 1);
   return (
     <ol className="mt-3 space-y-3">
-      {questions.map((question) => {
-        const done = !!question.answer;
-        const current = !isCompleted && question.position === currentPosition;
-
+      {steps.map((pos) => {
+        const done = pos <= answeredCount;
+        const current = !isCompleted && pos === currentPosition;
         return (
-          <li key={question.id} className="flex items-center gap-3 text-xs">
+          <li key={pos} className="flex items-center gap-3 text-xs">
             <span
               className={`flex size-5 shrink-0 items-center justify-center rounded-full border ${
                 done
@@ -142,7 +104,7 @@ function QuestionSteps({ questions, currentPosition, isCompleted }) {
               {done && <CheckIcon />}
             </span>
             <span className={current ? "font-semibold text-white" : "text-gray-400"}>
-              Вопрос {question.position}
+              Вопрос {pos}
             </span>
           </li>
         );
@@ -151,40 +113,124 @@ function QuestionSteps({ questions, currentPosition, isCompleted }) {
   );
 }
 
-// ---------- СТРАНИЦА ----------
-
 function InterviewPage() {
   const { id } = useParams();
   const navigate = useNavigate();
 
   const [interview, setInterview] = useState(null);
+  const [currentQuestion, setCurrentQuestion] = useState(null);
+  const [messages, setMessages] = useState([]);
   const [answerText, setAnswerText] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState("");
+  const [failedAnswers, setFailedAnswers] = useState([]);
+  const [retryingId, setRetryingId] = useState(null);
 
   const chatEndRef = useRef(null);
 
-  // Загружаем интервью при открытии страницы
   useEffect(() => {
-    setIsLoading(true);
-    getInterviewRequest(id)
-      .then((data) => {
-        // Завершённое интервью сразу открываем на результатах
-        if (data.interview.status === "COMPLETED") {
+    let cancelled = false;
+    async function load() {
+      setIsLoading(true);
+      setError("");
+      try {
+        const data = await getInterviewRequest(id);
+        if (cancelled) return;
+        const iv = data.interview || data;
+        if (iv.status === "COMPLETED") {
           navigate(`/interview/${id}/results`, { replace: true });
           return;
         }
-        setInterview(data.interview);
-      })
-      .catch((err) => setError(err.message || "Не удалось загрузить интервью"))
-      .finally(() => setIsLoading(false));
+        setInterview(iv);
+        setMessages([
+          {
+            id: "greeting",
+            author: "ai",
+            text: `Привет! Давай начнём техническое собеседование по направлению «${iv.directionName || iv.direction}». Будет ${QUESTIONS_PER_INTERVIEW} вопросов, отвечай своими словами.`,
+          },
+        ]);
+
+        try {
+          const q = await getCurrentQuestionRequest(id);
+          if (cancelled) return;
+          setCurrentQuestion(q);
+          setMessages((prev) => [
+            ...prev,
+            { id: `q-${q.questionId}`, author: "ai", text: `Вопрос ${q.position}. ${q.text}` },
+          ]);
+        } catch (err) {
+          const code = err.response?.data?.error?.code;
+          const failedIds = err.response?.data?.error?.details?.failedAnswerIds || [];
+          if (code === "ANALYSIS_FAILED" && failedIds.length) {
+            setFailedAnswers(failedIds);
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: "failed-info",
+                author: "ai",
+                text: "Не удалось проанализировать ответ. Можно повторить анализ.",
+              },
+            ]);
+          } else if (code === "ANALYSIS_PENDING") {
+            setMessages((prev) => [
+              ...prev,
+              { id: "pending-info", author: "ai", text: "Ответ ещё анализируется. Подожди немного и обнови страницу." },
+            ]);
+          } else if (!cancelled) {
+            setError(err.message || "Не удалось загрузить текущий вопрос");
+          }
+        }
+      } catch (err) {
+        if (!cancelled) setError(err.message || "Не удалось загрузить интервью");
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
   }, [id, navigate]);
 
-  // Прокручиваем чат вниз при новых сообщениях
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-  }, [interview, isSending]);
+  }, [messages, isSending]);
+
+  const handleRetry = async (answerId) => {
+    setRetryingId(answerId);
+    try {
+      const data = await retryAnswerAnalysisRequest(id, answerId);
+      setFailedAnswers((prev) => prev.filter((x) => x !== answerId));
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === `f-${answerId}` || m.id === "failed-info"
+            ? {
+                ...m,
+                text: data.analysis
+                  ? `Оценка: ${data.analysis.score}/10. ${data.analysis.recommendation || ""}`
+                  : "Анализ выполнен",
+                onRetry: undefined,
+              }
+            : m
+        )
+      );
+      if (data.interviewStatus === "COMPLETED") {
+        setTimeout(() => navigate(`/interview/${id}/results`), 1500);
+      } else if (data.nextPosition) {
+        const next = await getCurrentQuestionRequest(id);
+        setCurrentQuestion(next);
+        setMessages((prev) => [
+          ...prev,
+          { id: `q-${next.questionId}`, author: "ai", text: `Вопрос ${next.position}. ${next.text}` },
+        ]);
+      }
+    } catch (err) {
+      setError(err.message || "Не удалось повторить анализ");
+    } finally {
+      setRetryingId(null);
+    }
+  };
 
   if (isLoading) {
     return <p className="text-sm text-gray-400">Загружаем интервью...</p>;
@@ -194,45 +240,68 @@ function InterviewPage() {
     return (
       <div className="space-y-4">
         <p className="text-red-500">{error || "Интервью не найдено"}</p>
-        <Button
-          onClick={() => navigate("/interview/setup")}
-          className="bg-[#D2FF52] text-black hover:bg-[#bce646]"
-        >
+        <Button onClick={() => navigate("/interview/setup")} className="bg-[#D2FF52] text-black hover:bg-[#bce646]">
           Настроить новое интервью
         </Button>
       </div>
     );
   }
 
-  const answeredCount = interview.questions.filter((q) => q.answer).length;
-  const currentQuestion = interview.questions.find((q) => !q.answer);
+  const answeredCount = interview.answeredCount ?? 0;
   const isCompleted = interview.status === "COMPLETED";
-  const messages = buildMessages(interview);
   const progressPercent = (answeredCount / QUESTIONS_PER_INTERVIEW) * 100;
 
-  // Отправка ответа на текущий вопрос
   const handleSubmit = async (e) => {
     e?.preventDefault();
     if (!answerText.trim() || !currentQuestion || isSending) return;
 
+    const textToSend = answerText.trim();
     setError("");
     setIsSending(true);
     try {
-      const data = await submitAnswerRequest(interview.id, currentQuestion.id, answerText.trim());
+      const data = await submitAnswerRequest(interview.id, currentQuestion.questionId, textToSend);
       setAnswerText("");
 
-      // Обновляем вопрос, на который ответили, и статус интервью
+      const feedbackText =
+        data.analysisStatus === "FAILED"
+          ? "Не удалось проанализировать ответ. Можно повторить."
+          : data.analysis
+          ? `Оценка: ${data.analysis.score}/10. ${data.analysis.recommendation || ""}`
+          : "Ответ сохранён, анализ выполняется...";
+
+      setMessages((prev) => [
+        ...prev,
+        { id: `a-${currentQuestion.questionId}`, author: "user", text: textToSend },
+        {
+          id: `f-${data.answerId}`,
+          author: "ai",
+          text: feedbackText,
+          onRetry: data.analysisStatus === "FAILED" ? () => handleRetry(data.answerId) : undefined,
+        },
+      ]);
+
+      if (data.analysisStatus === "FAILED") {
+        setFailedAnswers((prev) => [...prev, data.answerId]);
+      }
+
       setInterview((prev) => ({
         ...prev,
-        ...data.interview,
-        questions: prev.questions.map((q) =>
-          q.id === currentQuestion.id ? { ...q, answer: data.answer } : q
-        ),
+        status: data.interviewStatus,
+        answeredCount: (prev.answeredCount ?? 0) + 1,
       }));
 
-      // После последнего ответа даём прочитать разбор и открываем результаты
-      if (data.interview.status === "COMPLETED") {
-        setTimeout(() => navigate(`/interview/${interview.id}/results`), 2000);
+      if (data.interviewStatus === "COMPLETED") {
+        setTimeout(() => navigate(`/interview/${interview.id}/results`), 1500);
+        return;
+      }
+
+      if (data.nextPosition) {
+        const next = await getCurrentQuestionRequest(id);
+        setCurrentQuestion(next);
+        setMessages((prev) => [
+          ...prev,
+          { id: `q-${next.questionId}`, author: "ai", text: `Вопрос ${next.position}. ${next.text}` },
+        ]);
       }
     } catch (err) {
       setError(err.message || "Не удалось отправить ответ");
@@ -241,7 +310,6 @@ function InterviewPage() {
     }
   };
 
-  // Enter отправляет ответ, Shift + Enter переносит строку
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -249,7 +317,6 @@ function InterviewPage() {
     }
   };
 
-  // Досрочное завершение (UC-008)
   const handleFinishEarly = async () => {
     if (!window.confirm("Завершить интервью досрочно? Оценка будет по уже данным ответам.")) return;
     try {
@@ -262,14 +329,13 @@ function InterviewPage() {
 
   return (
     <div className="mx-auto max-w-[1100px]">
-      {/* Верх: заголовок и прогресс */}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-[#D2FF52]">
             Тренировочное собеседование
           </p>
           <h1 className="mt-3 text-2xl font-bold tracking-tight md:text-3xl">
-            {interview.direction} · {getLevelName(interview.levelCode)}
+            {interview.directionName || interview.direction} · {getLevelName(interview.levelCode || interview.levelName)}
           </h1>
           <p className="mt-2 text-sm text-gray-400">Техническое интервью</p>
         </div>
@@ -286,20 +352,32 @@ function InterviewPage() {
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-[1fr_300px]">
-        {/* Чат */}
         <section className="flex min-h-[520px] flex-col rounded-2xl border border-[#2E322E] bg-[#1F221F]">
           <div className="flex items-center justify-between border-b border-[#2E322E] px-5 py-3">
             <div className="flex items-center gap-2 text-sm font-medium">
               <BotIcon className="text-[#D2FF52]" />
               ИИ-интервьюер
             </div>
-            <p className="text-[11px] text-gray-500">Сессия {formatTime(interview.startedAt)}</p>
           </div>
 
           <div className="flex-1 space-y-4 overflow-y-auto px-4 py-5 md:px-5" style={{ maxHeight: "60vh" }}>
             <p className="text-center text-[10px] uppercase tracking-wider text-gray-500">Начало сессии</p>
             {messages.map((message) => (
-              <ChatMessage key={message.id} {...message} />
+              <ChatMessage
+                key={message.id}
+                {...message}
+                onRetry={message.onRetry}
+                isRetrying={retryingId === message.id?.replace("f-", "")}
+              />
+            ))}
+            {failedAnswers.map((aid) => (
+              <ChatMessage
+                key={`retry-${aid}`}
+                author="ai"
+                text="Не удалось проанализировать ответ."
+                onRetry={() => handleRetry(aid)}
+                isRetrying={retryingId === aid}
+              />
             ))}
             {isSending && <TypingMessage />}
             {isCompleted && (
@@ -308,7 +386,6 @@ function InterviewPage() {
             <div ref={chatEndRef} />
           </div>
 
-          {/* Поле ответа */}
           <form onSubmit={handleSubmit} className="border-t border-[#2E322E] px-4 py-4 md:px-5">
             <label htmlFor="answer" className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">
               Ваш ответ
@@ -337,20 +414,19 @@ function InterviewPage() {
           </form>
         </section>
 
-        {/* Боковая панель */}
         <aside className="space-y-4 rounded-2xl border border-[#2E322E] bg-[#1F221F] p-5">
           <h2 className="text-sm font-semibold">О собеседовании</h2>
 
           <div className="border-t border-[#2E322E] pt-4">
             <p className="text-[10px] uppercase tracking-wider text-gray-500">Позиция</p>
-            <p className="mt-1 text-sm font-semibold">{interview.direction}</p>
-            <p className="text-xs text-gray-400">Уровень: {getLevelName(interview.levelCode)}</p>
+            <p className="mt-1 text-sm font-semibold">{interview.directionName || interview.direction}</p>
+            <p className="text-xs text-gray-400">Уровень: {getLevelName(interview.levelCode || interview.levelName)}</p>
           </div>
 
           <div className="border-t border-[#2E322E] pt-4">
             <p className="text-[10px] uppercase tracking-wider text-gray-500">Этапы интервью</p>
             <QuestionSteps
-              questions={interview.questions}
+              answeredCount={answeredCount}
               currentPosition={currentQuestion?.position}
               isCompleted={isCompleted}
             />
