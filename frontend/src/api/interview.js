@@ -5,29 +5,17 @@
  */
 import api from "./axios";
 
-/** Количество вопросов в одном интервью */
 export const QUESTIONS_PER_INTERVIEW = 5;
 
-/** Справочник уровней (код + отображаемое имя) */
 export const LEVELS = [
   { code: "junior", name: "Junior" },
   { code: "middle", name: "Middle" },
 ];
 
-/**
- * Возвращает отображаемое имя уровня по коду.
- * @param {string} code - "junior" | "middle"
- * @returns {string}
- */
 export function getLevelName(code) {
   return LEVELS.find((level) => level.code === code)?.name || code;
 }
 
-/**
- * Ищет код уровня по введённому тексту (поддерживает русские варианты).
- * @param {string} text
- * @returns {"junior"|"middle"|null}
- */
 export function findLevelCode(text) {
   const value = text.trim().toLowerCase();
   if (["junior", "джун", "джуниор"].includes(value)) return "junior";
@@ -35,11 +23,6 @@ export function findLevelCode(text) {
   return null;
 }
 
-/**
- * Вердикт по итоговому баллу (MATCH ≥ 7.5, PARTIAL 5–7.4, BELOW < 5).
- * @param {number} score
- * @returns {"MATCH"|"PARTIAL"|"BELOW"}
- */
 export function getLevelVerdict(score) {
   const value = Number(score);
   if (!Number.isFinite(value) || value < 5) return "BELOW";
@@ -47,11 +30,6 @@ export function getLevelVerdict(score) {
   return "PARTIAL";
 }
 
-/**
- * Текст и цвет вердикта для UI.
- * @param {"MATCH"|"PARTIAL"|"BELOW"} levelVerdict
- * @returns {{code: string, text: string, color: string}}
- */
 export function getVerdictInfo(levelVerdict) {
   if (levelVerdict === "MATCH") {
     return { code: "MATCH", text: "Соответствует уровню", color: "#D2FF52" };
@@ -68,7 +46,6 @@ function createApiError(message, code) {
   return error;
 }
 
-/** Превращает массив вопросов с ответами в плоский список для ResultsPage */
 function buildAnswersFromQuestions(questions) {
   return (questions || []).map((question) => {
     const answer = question.answer;
@@ -106,10 +83,6 @@ function buildAnswersFromQuestions(questions) {
   });
 }
 
-/**
- * Нормализует ответ GET /interviews/{id}/results к единому формату.
- * Поддерживает как обёртку {interview}, так и плоский ответ с items.
- */
 function normalizeResults(data) {
   if (data?.interview) {
     const interview = data.interview;
@@ -193,52 +166,26 @@ function normalizeInterviewList(data) {
   return raw.map(toInterviewListItem).sort((a, b) => interviewSortTime(b) - interviewSortTime(a));
 }
 
-/**
- * Список направлений и уровней.
- * @returns {Promise<{directions: Array, levels: Array}>}
- */
 export const getDirectionsRequest = async () => {
   const response = await api.get("/directions");
   return response.data;
 };
 
-/**
- * Создаёт новое интервью.
- * @param {{directionCode: string, levelCode: string}} params
- * @returns {Promise<{id: string, status: string, ...}>}
- */
 export const createInterviewRequest = async ({ directionCode, levelCode }) => {
   const response = await api.post("/interviews", { directionCode, levelCode });
   return response.data;
 };
 
-/**
- * Краткие данные интервью (шапка экрана).
- * @param {string} interviewId
- * @returns {Promise<{interview: object}>}
- */
 export const getInterviewRequest = async (interviewId) => {
   const response = await api.get(`/interviews/${interviewId}`);
   return { interview: response.data };
 };
 
-/**
- * Текущий неотвеченный вопрос.
- * @param {string} interviewId
- * @returns {Promise<{position: number, questionId: string, text: string, totalQuestions: number}>}
- */
 export const getCurrentQuestionRequest = async (interviewId) => {
   const response = await api.get(`/interviews/${interviewId}/questions/current`);
   return response.data;
 };
 
-/**
- * Отправляет ответ на текущий вопрос и возвращает результат анализа.
- * @param {string} interviewId
- * @param {string} questionId
- * @param {string} answerText
- * @returns {Promise<{answerId: string, analysisStatus: string, analysis: object|null, interviewStatus: string, nextPosition: number|null}>}
- */
 export const submitAnswerRequest = async (interviewId, questionId, answerText) => {
   const response = await api.post(`/interviews/${interviewId}/answers`, {
     questionId,
@@ -247,22 +194,11 @@ export const submitAnswerRequest = async (interviewId, questionId, answerText) =
   return response.data;
 };
 
-/**
- * Досрочно завершает интервью.
- * @param {string} interviewId
- * @returns {Promise<{id: string, status: string, finishedEarly: boolean, totalScore: number|null}>}
- */
 export const finishInterviewRequest = async (interviewId) => {
   const response = await api.post(`/interviews/${interviewId}/complete`);
   return response.data;
 };
 
-/**
- * Результаты завершённого интервью.
- * @param {string} interviewId
- * @returns {Promise<{interview: object, answers: Array, feedback: object|null}>}
- * @throws {Error} с кодом INTERVIEW_NOT_COMPLETED, если интервью ещё идёт
- */
 export const getInterviewResultsRequest = async (interviewId) => {
   try {
     const response = await api.get(`/interviews/${interviewId}/results`);
@@ -280,11 +216,6 @@ export const getInterviewResultsRequest = async (interviewId) => {
   }
 };
 
-/**
- * Список интервью пользователя (история).
- * @param {"ACTIVE"|"COMPLETED"|undefined} status - фильтр; без параметра бэкенд отдаёт COMPLETED
- * @returns {Promise<{interviews: Array}>}
- */
 export const getInterviewsRequest = async (status) => {
   const params = status && status !== "all" ? { status: status.toUpperCase() } : {};
   const response = await api.get("/interviews", { params });
