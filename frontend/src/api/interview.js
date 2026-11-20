@@ -194,6 +194,27 @@ export const submitAnswerRequest = async (interviewId, questionId, answerText) =
   return response.data;
 };
 
+/**
+ * Повторяет анализ ответа со статусом FAILED.
+ * @param {string} interviewId
+ * @param {string} answerId
+ * @returns {Promise<{answerId: string, analysisStatus: string, analysis: object|null, interviewStatus: string, nextPosition: number|null}>}
+ */
+export const retryAnswerAnalysisRequest = async (interviewId, answerId) => {
+  const response = await api.post(`/interviews/${interviewId}/answers/${answerId}/retry`);
+  return response.data;
+};
+
+/**
+ * Повторяет формирование итоговых рекомендаций.
+ * @param {string} interviewId
+ * @returns {Promise<object>}
+ */
+export const retryFeedbackRequest = async (interviewId) => {
+  const response = await api.post(`/interviews/${interviewId}/feedback/retry`);
+  return response.data;
+};
+
 export const finishInterviewRequest = async (interviewId) => {
   const response = await api.post(`/interviews/${interviewId}/complete`);
   return response.data;
