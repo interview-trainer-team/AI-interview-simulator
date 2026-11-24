@@ -5,6 +5,7 @@ import {
   getInterviewRequest,
   getCurrentQuestionRequest,
   submitAnswerRequest,
+  retryAnswerAnalysisRequest,
   finishInterviewRequest,
   getLevelName,
   QUESTIONS_PER_INTERVIEW,
@@ -40,7 +41,7 @@ function formatTime(isoString) {
   return new Date(isoString).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
 }
 
-function ChatMessage({ author, text, time }) {
+function ChatMessage({ author, text, time, onRetry, isRetrying }) {
   const isAi = author === "ai";
   return (
     <div className={`flex gap-3 ${isAi ? "justify-start" : "justify-end"}`}>
@@ -54,6 +55,16 @@ function ChatMessage({ author, text, time }) {
           {isAi ? "ИИ-интервьюер" : "Твой ответ"}
         </p>
         <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-gray-200">{text}</p>
+        {onRetry && (
+          <Button
+            type="button"
+            onClick={onRetry}
+            disabled={isRetrying}
+            className="mt-3 h-9 rounded-lg bg-[#D2FF52] px-3 text-xs font-semibold text-black hover:bg-[#bce646]"
+          >
+            {isRetrying ? "Повторяем..." : "Повторить анализ"}
+          </Button>
+        )}
         {time && <p className="mt-1 text-right text-[10px] text-gray-500">{formatTime(time)}</p>}
       </div>
     </div>
@@ -113,6 +124,8 @@ function InterviewPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState("");
+  const [failedAnswers, setFailedAnswers] = useState([]);
+  const [retryingId, setRetryingId] = useState(null);
 
   const chatEndRef = useRef(null);
 
@@ -138,13 +151,36 @@ function InterviewPage() {
           },
         ]);
 
-        const q = await getCurrentQuestionRequest(id);
-        if (cancelled) return;
-        setCurrentQuestion(q);
-        setMessages((prev) => [
-          ...prev,
-          { id: `q-${q.questionId}`, author: "ai", text: `Вопрос ${q.position}. ${q.text}` },
-        ]);
+        try {
+          const q = await getCurrentQuestionRequest(id);
+          if (cancelled) return;
+          setCurrentQuestion(q);
+          setMessages((prev) => [
+            ...prev,
+            { id: `q-${q.questionId}`, author: "ai", text: `Вопрос ${q.position}. ${q.text}` },
+          ]);
+        } catch (err) {
+          const code = err.response?.data?.error?.code;
+          const failedIds = err.response?.data?.error?.details?.failedAnswerIds || [];
+          if (code === "ANALYSIS_FAILED" && failedIds.length) {
+            setFailedAnswers(failedIds);
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: "failed-info",
+                author: "ai",
+                text: "Не удалось проанализировать ответ. Можно повторить анализ.",
+              },
+            ]);
+          } else if (code === "ANALYSIS_PENDING") {
+            setMessages((prev) => [
+              ...prev,
+              { id: "pending-info", author: "ai", text: "Ответ ещё анализируется. Подожди немного и обнови страницу." },
+            ]);
+          } else if (!cancelled) {
+            setError(err.message || "Не удалось загрузить текущий вопрос");
+          }
+        }
       } catch (err) {
         if (!cancelled) setError(err.message || "Не удалось загрузить интервью");
       } finally {
@@ -160,6 +196,41 @@ function InterviewPage() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [messages, isSending]);
+
+  const handleRetry = async (answerId) => {
+    setRetryingId(answerId);
+    try {
+      const data = await retryAnswerAnalysisRequest(id, answerId);
+      setFailedAnswers((prev) => prev.filter((x) => x !== answerId));
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === `f-${answerId}` || m.id === "failed-info"
+            ? {
+                ...m,
+                text: data.analysis
+                  ? `Оценка: ${data.analysis.score}/10. ${data.analysis.recommendation || ""}`
+                  : "Анализ выполнен",
+                onRetry: undefined,
+              }
+            : m
+        )
+      );
+      if (data.interviewStatus === "COMPLETED") {
+        setTimeout(() => navigate(`/interview/${id}/results`), 1500);
+      } else if (data.nextPosition) {
+        const next = await getCurrentQuestionRequest(id);
+        setCurrentQuestion(next);
+        setMessages((prev) => [
+          ...prev,
+          { id: `q-${next.questionId}`, author: "ai", text: `Вопрос ${next.position}. ${next.text}` },
+        ]);
+      }
+    } catch (err) {
+      setError(err.message || "Не удалось повторить анализ");
+    } finally {
+      setRetryingId(null);
+    }
+  };
 
   if (isLoading) {
     return <p className="text-sm text-gray-400">Загружаем интервью...</p>;
@@ -184,23 +255,34 @@ function InterviewPage() {
     e?.preventDefault();
     if (!answerText.trim() || !currentQuestion || isSending) return;
 
+    const textToSend = answerText.trim();
     setError("");
     setIsSending(true);
     try {
-      const data = await submitAnswerRequest(interview.id, currentQuestion.questionId, answerText.trim());
+      const data = await submitAnswerRequest(interview.id, currentQuestion.questionId, textToSend);
       setAnswerText("");
+
+      const feedbackText =
+        data.analysisStatus === "FAILED"
+          ? "Не удалось проанализировать ответ. Можно повторить."
+          : data.analysis
+          ? `Оценка: ${data.analysis.score}/10. ${data.analysis.recommendation || ""}`
+          : "Ответ сохранён, анализ выполняется...";
 
       setMessages((prev) => [
         ...prev,
-        { id: `a-${currentQuestion.questionId}`, author: "user", text: answerText.trim() },
+        { id: `a-${currentQuestion.questionId}`, author: "user", text: textToSend },
         {
           id: `f-${data.answerId}`,
           author: "ai",
-          text: data.analysis
-            ? `Оценка: ${data.analysis.score}/10. ${data.analysis.recommendation || ""}`
-            : "Ответ сохранён, анализ выполняется...",
+          text: feedbackText,
+          onRetry: data.analysisStatus === "FAILED" ? () => handleRetry(data.answerId) : undefined,
         },
       ]);
+
+      if (data.analysisStatus === "FAILED") {
+        setFailedAnswers((prev) => [...prev, data.answerId]);
+      }
 
       setInterview((prev) => ({
         ...prev,
@@ -281,7 +363,21 @@ function InterviewPage() {
           <div className="flex-1 space-y-4 overflow-y-auto px-4 py-5 md:px-5" style={{ maxHeight: "60vh" }}>
             <p className="text-center text-[10px] uppercase tracking-wider text-gray-500">Начало сессии</p>
             {messages.map((message) => (
-              <ChatMessage key={message.id} {...message} />
+              <ChatMessage
+                key={message.id}
+                {...message}
+                onRetry={message.onRetry}
+                isRetrying={retryingId === message.id?.replace("f-", "")}
+              />
+            ))}
+            {failedAnswers.map((aid) => (
+              <ChatMessage
+                key={`retry-${aid}`}
+                author="ai"
+                text="Не удалось проанализировать ответ."
+                onRetry={() => handleRetry(aid)}
+                isRetrying={retryingId === aid}
+              />
             ))}
             {isSending && <TypingMessage />}
             {isCompleted && (
