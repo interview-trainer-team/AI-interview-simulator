@@ -64,15 +64,30 @@ class UpdateProfileSerializer(serializers.Serializer):
     )
 
 class ChangePasswordSerializer(serializers.Serializer):
-    current_password = serializers.CharField(write_only=True, required=True, error_messages={'blank': 'Заполните все поля'})
-    new_password = serializers.CharField(write_only=True, required=True, error_messages={'blank': 'Заполните все поля'})
+    currentPassword = serializers.CharField(
+        source="current_password",
+        write_only=True,
+        required=True,
+        error_messages={"blank": "Заполните все поля"},
+    )
+    newPassword = serializers.CharField(
+        source="new_password",
+        write_only=True,
+        required=True,
+        error_messages={"blank": "Заполните все поля"},
+    )
 
-    def validate_new_password(self, value):
+    def validate_newPassword(self, value):
         if len(value) < 8 or len(value) > 30:
-            raise serializers.ValidationError("Пароль должен быть от 8 до 30 символов")
-        import re
-        if not re.search(r'[A-Z]', value) or not re.search(r'[a-z]', value):
-            raise serializers.ValidationError("Пароль должен содержать заглавные и строчные латинские буквы")
-        if not re.search(r'\d', value):
-            raise serializers.ValidationError("Пароль должен содержать хотя бы одну цифру")
+            raise serializers.ValidationError(
+                "Пароль должен быть от 8 до 30 символов"
+            )
+        if not re.search(r"[A-Z]", value) or not re.search(r"[a-z]", value):
+            raise serializers.ValidationError(
+                "Пароль должен содержать заглавные и строчные латинские буквы"
+            )
+        if not re.search(r"\d", value):
+            raise serializers.ValidationError(
+                "Пароль должен содержать хотя бы одну цифру"
+            )
         return value

@@ -1,0 +1,7 @@
+.git/
+.env
+backend/
+docs/
+**/node_modules/
+**/dist/
+**/.venv/

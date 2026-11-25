@@ -143,14 +143,14 @@ class ChangePasswordView(APIView):
         user = request.user
         if not user.check_password(serializer.validated_data['current_password']):
             return Response(
-                {"error": {"code": "INVALID_CURRENT_PASSWORD", "message": "Неверный текущий пароль", "details": {"fields": {"current_password": "Неверный пароль"}}}},
+                {"error": {"code": "INVALID_CURRENT_PASSWORD", "message": "Неверный текущий пароль", "details": {"fields": {"currentPassword": "Неверный пароль"}}}},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         new_password = serializer.validated_data['new_password']
         if user.check_password(new_password):
             return Response(
-                {"error": {"code": "SAME_PASSWORD", "message": "Новый пароль совпадает со старым", "details": {"fields": {"new_password": "Введите другой пароль"}}}},
+                {"error": {"code": "SAME_PASSWORD", "message": "Новый пароль совпадает со старым", "details": {"fields": {"newPassword": "Введите другой пароль"}}}},
                 status=status.HTTP_400_BAD_REQUEST
             )
 

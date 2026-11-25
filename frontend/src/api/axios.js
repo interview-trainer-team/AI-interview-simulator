@@ -2,7 +2,8 @@ import axios from "axios";
 
 // Общий инстанс axios для всех запросов к бэкенду
 const api = axios.create({
-  baseURL: "http://localhost:8000/api",
+  // По умолчанию относительный адрес: в разработке его проксирует Vite, на сервере веб-сервер
+  baseURL: import.meta.env.VITE_API_BASE_URL || "/api",
   headers: {
     "Content-Type": "application/json",
   },
@@ -10,7 +11,7 @@ const api = axios.create({
 
 // Эндпоинты, где 401/400 означает «неверный пароль», а не «токен протух».
 // На них не разлогиниваем пользователя.
-const AUTH_EXCEPTIONS = ["/auth/login", "/auth/change-password"];
+const AUTH_EXCEPTIONS = ["/auth/login", "/users/me/password"];
 
 // Перед каждым запросом подставляем JWT, если он есть
 api.interceptors.request.use((config) => {
