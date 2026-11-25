@@ -1,0 +1,17 @@
+# SITE_ADDRESS: домен (тогда HTTPS и сертификат автоматически) или :80 для проверки по HTTP
+{$SITE_ADDRESS::80} {
+	encode gzip
+
+	# Всё, что относится к Django: API, админка, её статика
+	@backend path /api/* /admin/* /static/*
+	handle @backend {
+		reverse_proxy backend:8000
+	}
+
+	# Остальное: собранный frontend, неизвестные адреса отдают index.html (React Router)
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

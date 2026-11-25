@@ -31,7 +31,6 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "False") == "True"
 
-# ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 ALLOWED_HOSTS = [
     host.strip()
     for host in os.getenv(
@@ -159,6 +158,14 @@ CORS_ALLOWED_ORIGINS = [
         "CORS_ALLOWED_ORIGINS",
         "http://localhost:5173,http://127.0.0.1:5173",
     ).split(",")
+    if origin.strip()
+]
+
+# Адреса сайта по HTTPS для CSRF-проверки (нужны для входа в админку на домене),
+# например https://example.com. Для API на JWT не требуются.
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",")
     if origin.strip()
 ]
 
