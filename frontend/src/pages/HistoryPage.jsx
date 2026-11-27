@@ -142,7 +142,7 @@ function HistoryPage() {
     setIsLoading(true);
     setError("");
 
-    getInterviewsRequest()
+    getInterviewsRequest("all")
       .then((data) => setInterviews(data.interviews || []))
       .catch((err) => setError(err.message || "Не удалось загрузить историю"))
       .finally(() => setIsLoading(false));
