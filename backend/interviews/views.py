@@ -107,17 +107,19 @@ class InterviewListCreateView(APIView):
         )
 
     def get(self, request):
-        status_param = request.query_params.get("status", "COMPLETED")
+        status_param = request.query_params.get("status")
         if status_param == "COMPLETED":
             statuses = [InterviewStatus.COMPLETED]
         elif status_param == "ACTIVE":
             statuses = ACTIVE_STATUSES
+        elif status_param is None or status_param.lower() == "all":
+            statuses = [InterviewStatus.CREATED, InterviewStatus.IN_PROGRESS, InterviewStatus.COMPLETED]
         else:
             return error_response(
                 "VALIDATION_ERROR",
                 "Проверьте введённые данные",
                 status.HTTP_400_BAD_REQUEST,
-                {"fields": {"status": "Допустимые значения: COMPLETED, ACTIVE"}},
+                {"fields": {"status": "Допустимые значения: COMPLETED, ACTIVE, all"}},
             )
 
         interviews = (
